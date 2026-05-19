@@ -41,7 +41,6 @@ import (
 	"github.com/88250/lute/parse"
 	"github.com/88250/vitess-sqlparser/sqlparser"
 	"github.com/jinzhu/copier"
-	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/logging"
 	"github.com/siyuan-note/siyuan/kernel/conf"
 	"github.com/siyuan-note/siyuan/kernel/search"
@@ -514,9 +513,8 @@ func FindReplace(keyword, replacement string, replaceTypes map[string]bool, ids 
 	renameRootTitles := map[string]string{}
 	cachedTrees := map[string]*parse.Tree{}
 
-	historyDir, err := getHistoryDir(HistoryOpReplace, time.Now())
+	historyDir, err := getHistoryDir(HistoryOpReplace)
 	if err != nil {
-		logging.LogErrorf("get history dir failed: %s", err)
 		return
 	}
 
@@ -544,22 +542,7 @@ func FindReplace(keyword, replacement string, replaceTypes map[string]bool, ids 
 			continue
 		}
 
-		historyPath := filepath.Join(historyDir, tree.Box, tree.Path)
-		if err = os.MkdirAll(filepath.Dir(historyPath), 0755); err != nil {
-			logging.LogErrorf("generate history failed: %s", err)
-			return
-		}
-
-		var data []byte
-		if data, err = filelock.ReadFile(filepath.Join(util.DataDir, tree.Box, tree.Path)); err != nil {
-			logging.LogErrorf("generate history failed: %s", err)
-			return
-		}
-
-		if err = gulu.File.WriteFileSafer(historyPath, data, 0644); err != nil {
-			logging.LogErrorf("generate history failed: %s", err)
-			return
-		}
+		generateTreeHistory(tree, historyDir)
 
 		cachedTrees[bt.RootID] = tree
 	}
@@ -1102,6 +1085,8 @@ func replaceTextNode(text *ast.Node, method int, keyword string, replacement str
 			for _, rNode := range replaceNodes {
 				text.InsertBefore(rNode)
 			}
+			block := treenode.ParentBlock(text)
+			treenode.RefreshUpdated(block)
 			return true
 		}
 	} else if 3 == method {
@@ -1120,6 +1105,8 @@ func replaceTextNode(text *ast.Node, method int, keyword string, replacement str
 			for _, rNode := range replaceNodes {
 				text.InsertBefore(rNode)
 			}
+			block := treenode.ParentBlock(text)
+			treenode.RefreshUpdated(block)
 			return true
 		}
 	}
@@ -2273,10 +2260,14 @@ func getRefSearchIgnoreLines() (ret []string) {
 
 func filterQueryInvisibleChars(query string) string {
 	query = strings.ReplaceAll(query, "　", "_@full_width_space@_")
+	query = strings.ReplaceAll(query, "\u2002", "_@en_space@_")
+	query = strings.ReplaceAll(query, "\u2003", "_@em_space@_")
 	query = strings.ReplaceAll(query, "\t", "_@tab@_")
 	query = strings.ReplaceAll(query, string(gulu.ZWJ), "__@ZWJ@__")
 	query = util.RemoveInvalid(query)
 	query = strings.ReplaceAll(query, "_@full_width_space@_", "　")
+	query = strings.ReplaceAll(query, "_@en_space@_", "\u2002")
+	query = strings.ReplaceAll(query, "_@em_space@_", "\u2003")
 	query = strings.ReplaceAll(query, "_@tab@_", "\t")
 	query = strings.ReplaceAll(query, "__@ZWJ@__", string(gulu.ZWJ))
 	query = strings.ReplaceAll(query, string(gulu.ZWJ)+"#", "#")
