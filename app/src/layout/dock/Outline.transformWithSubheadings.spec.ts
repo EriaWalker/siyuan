@@ -178,6 +178,38 @@ const createProtyle = (root: HTMLElement) => ({
     },
 }) as unknown as IProtyle;
 
+const makeHeadingTree = () => [
+    {
+        id: "parent-a",
+        type: "outline",
+        nodeType: "NodeHeading",
+        subType: "h2",
+        depth: 0,
+        name: "Parent A",
+        folded: false,
+        blocks: [{
+            id: "child-a",
+            type: "NodeHeading",
+            subType: "h3",
+            depth: 1,
+            content: "Child A",
+            refText: "",
+            defID: "",
+            defPath: "",
+        }],
+    },
+    {
+        id: "parent-b",
+        type: "outline",
+        nodeType: "NodeHeading",
+        subType: "h2",
+        depth: 0,
+        name: "Parent B",
+        folded: false,
+        blocks: [],
+    },
+] as unknown as IBlockTree[];
+
 const getHeadingLevelTransactionPayload = () => {
     const call = mocks.fetchPost.mock.calls.find(item => item[0] === "/api/block/getHeadingLevelTransaction");
     expect(call).toBeTruthy();
@@ -280,6 +312,7 @@ describe("Outline transform with sub-headings", () => {
 
     it("batch transform with sub-headings emits one transaction containing all selected heading subtrees", () => {
         const outline = makeOutline();
+        outline.tree.updateData(makeHeadingTree());
         mocks.getAllModels.mockReturnValue({editor: [{editor: {protyle: createProtyle(document.createElement("div"))}}]});
         (outline as unknown as { selectedHeadingIds: Set<string> }).selectedHeadingIds = new Set(["parent-a", "parent-b"]);
 
@@ -295,6 +328,7 @@ describe("Outline transform with sub-headings", () => {
 
     it("nested selected headings do not double-transform the same subtree", () => {
         const outline = makeOutline();
+        outline.tree.updateData(makeHeadingTree());
         mocks.getAllModels.mockReturnValue({editor: [{editor: {protyle: createProtyle(document.createElement("div"))}}]});
         (outline as unknown as { selectedHeadingIds: Set<string> }).selectedHeadingIds = new Set(["parent-a", "child-a"]);
 
