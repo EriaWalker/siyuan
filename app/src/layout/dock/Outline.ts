@@ -21,7 +21,7 @@ import {unicode2Emoji} from "../../emoji";
 import {getPreviousBlock} from "../../protyle/wysiwyg/getBlock";
 import {App} from "../../index";
 import {checkFold} from "../../util/noRelyPCFunction";
-import {transaction} from "../../protyle/wysiwyg/transaction";
+import {headingsLevelTransaction, transaction} from "../../protyle/wysiwyg/transaction";
 import {goHome} from "../../protyle/wysiwyg/commonHotkey";
 import {Editor} from "../../editor";
 import {mathRender} from "../../protyle/render/mathRender";
@@ -1082,6 +1082,7 @@ export class Outline extends Model {
                 x: event.clientX,
                 y: event.clientY
             });
+            // 退出多选菜单执行逻辑
             return;
         }
         if (!window.siyuan.config.readonly) {
@@ -1442,88 +1443,21 @@ export class Outline extends Model {
         if (!protyle) {
             return;
         }
-        const updates: Array<{
-            id: string,
-            targetLevel: number
-        }> = [];
+        const headingElements: HTMLElement[] = [];
         this.getSelectedHeadingItems(fallbackElement).forEach(item => {
             const id = item.getAttribute("data-node-id");
-            const currentLevel = this.getHeadingLevel(item);
-            if (!id || currentLevel < 1 || currentLevel > 6) {
+            if (!id) {
                 return;
             }
-            const targetLevel = direction === "upgrade" ? Math.max(1, currentLevel - 1) : Math.min(6, currentLevel + 1);
-            if (targetLevel !== currentLevel) {
-                updates.push({
-                    id,
-                    targetLevel
-                });
+            const headingElement = protyle.wysiwyg.element.querySelector(`[data-node-id="${id}"]`) as HTMLElement;
+            if (headingElement?.getAttribute("data-type") === "NodeHeading") {
+                headingElements.push(headingElement);
             }
         });
-        if (updates.length === 0) {
-            return;
-        }
-        fetchPost("/api/block/getBlockDOMs", {
-            ids: updates.map(item => item.id)
-        }, response => {
-            const doOperations: IOperation[] = [];
-            const undoOperations: IOperation[] = [];
-            const lute = protyle.lute as unknown as {
-                Blocks2Hs: (html: string, level: number) => string
-            };
-            updates.forEach(item => {
-                const oldHTML = response.data?.[item.id];
-                if (!oldHTML) {
-                    return;
-                }
-                const oldTemplate = document.createElement("template");
-                oldTemplate.innerHTML = oldHTML;
-                const oldElement = oldTemplate.content.firstElementChild as HTMLElement;
-                if (!oldElement || oldElement.getAttribute("data-type") !== "NodeHeading") {
-                    return;
-                }
-                let newHTML = lute.Blocks2Hs(oldHTML, item.targetLevel);
-                const newTemplate = document.createElement("template");
-                newTemplate.innerHTML = newHTML;
-                const newElement = newTemplate.content.firstElementChild as HTMLElement;
-                if (!newElement || newElement.getAttribute("data-type") !== "NodeHeading") {
-                    return;
-                }
-                if (oldElement.getAttribute("fold") === "1" && newElement.getAttribute("data-subtype") !== oldElement.getAttribute("data-subtype")) {
-                    newHTML = newHTML.replace(' fold="1"', "");
-                }
-                if (oldHTML === newHTML) {
-                    return;
-                }
-                undoOperations.push({
-                    action: "update",
-                    id: item.id,
-                    data: oldHTML,
-                });
-                doOperations.push({
-                    action: "update",
-                    id: item.id,
-                    data: newHTML
-                });
-            });
-            if (doOperations.length === 0) {
-                return;
-            }
-            doOperations.forEach((operation, index) => {
-                protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`).forEach((itemElement: HTMLElement) => {
-                    itemElement.outerHTML = operation.data;
-                });
-                protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`).forEach((itemElement: HTMLElement) => {
-                    mathRender(itemElement);
-                });
-                if (index === 0) {
-                    const focusElement = protyle.wysiwyg.element.querySelector(`[data-node-id="${operation.id}"]`);
-                    if (focusElement) {
-                        focusElement.scrollIntoView({behavior: "smooth", block: "center"});
-                    }
-                }
-            });
-            transaction(protyle, doOperations, undoOperations);
+        headingsLevelTransaction({
+            protyle,
+            headingElements,
+            direction
         });
     }
 
