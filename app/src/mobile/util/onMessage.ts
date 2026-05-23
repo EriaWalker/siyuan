@@ -11,7 +11,6 @@ import {App} from "../../index";
 import {reloadPlugin} from "../../plugin/loader";
 import {reloadEmoji} from "../../emoji";
 import {setLocalShorthandCount} from "../../util/noRelyPCFunction";
-import {updateControlAlt} from "../../protyle/util/hotKey";
 import {renderSnippet} from "../../config/util/snippets";
 import {redirectToCheckAuth} from "../../util/pathName";
 
@@ -67,7 +66,6 @@ export const onMessage = (app: App, data: IWebSocketData) => {
                 break;
             case "setConf":
                 window.siyuan.config = data.data;
-                updateControlAlt();
                 break;
             case "setPublish":
                 window.siyuan.config.publish = data.data;
@@ -92,7 +90,7 @@ export const onMessage = (app: App, data: IWebSocketData) => {
                 openMobileFileById(app, data.data.id);
                 break;
             case"txerr":
-                transactionError();
+                transactionError(data.msg);
                 break;
             case"statusbar":
                 if (!document.querySelector("#keyboardToolbar").classList.contains("fn__none") ||
