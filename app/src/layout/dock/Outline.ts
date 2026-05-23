@@ -152,9 +152,14 @@ export class Outline extends Model {
                 this.setFilter();
             }
         });
+        // ========== 前端 UI 与交互实现 ==========
+        // 树形结构渲染：实例化Tree组件来显示大纲标题的层级结构
+        // Tree组件在app/src/util/Tree.ts中定义，用于渲染和管理大纲节点的树形展示
         this.tree = new Tree({
             element: this.element,
             data: null,
+            // 用户交互：普通点击大纲标题
+            // 点击后：若为预览模式则通过 scrollIntoView 滚动定位；否则打开对应的标题块
             click: (element: HTMLElement) => {
                 const id = element.getAttribute("data-node-id");
                 if (this.isPreview) {
@@ -184,6 +189,9 @@ export class Outline extends Model {
                     });
                 }
             },
+            // 用户交互：Ctrl + 点击大纲标题
+            // Ctrl点击箭头时：展开/折叠当前标题的所有子标题
+            // Ctrl点击标题时：聚焦并放大/缩小(Zoom In/Out)该标题块
             ctrlClick: (element: HTMLElement, event) => {
                 const arrowElement = hasClosestByClassName(event.target as Element, "b3-list-item__toggle");
                 if (arrowElement && !arrowElement.classList.contains("fn__hidden")) {
@@ -198,6 +206,8 @@ export class Outline extends Model {
                     zoomIn: true,
                 });
             },
+            // 用户交互：Alt + 点击大纲标题
+            // Alt点击箭头时：切换同层级的所有标题的展开/折叠状态（基于标题级别而非DOM层级）
             altClick: (element: HTMLElement, event: MouseEvent) => {
                 // alt 点击箭头，切换同层级的所有标题的展开/折叠状态
                 const arrowElement = hasClosestByClassName(event.target as HTMLElement, "b3-list-item__toggle");
@@ -328,6 +338,10 @@ export class Outline extends Model {
         });
         this.bindSort();
 
+        // 数据拉取：初始化时向后台发送POST请求获取大纲数据
+        // 接口：/api/outline/getDocOutline
+        // 参数：id(文档Block ID)、preview(是否为预览模式)
+        // 前端在初始化及文档更新时会拉取最新的大纲节点数据
         fetchPost("/api/outline/getDocOutline", {
             id: this.blockId,
             preview: this.isPreview
@@ -340,6 +354,9 @@ export class Outline extends Model {
     }
 
     private bindSort() {
+        // 用户交互：拖拽排序大纲标题
+        // 通过监听鼠标拖拽事件，允许用户在侧边栏直接拖拽标题来调整文档的层级和顺序
+        // 拖拽完成后会通过 transaction 事务提交 moveOutlineHeading 操作给内核，更新文档结构
         this.element.addEventListener("mousedown", (event: MouseEvent) => {
             const item = hasClosestByClassName(event.target as HTMLElement, "b3-list-item");
             if (!item || item.tagName !== "LI" || this.element.getAttribute("data-loading") === "true") {
@@ -678,6 +695,10 @@ export class Outline extends Model {
     }
 
     public saveExpendIds() {
+        // 大纲折叠状态保存：调用后台接口记住用户在大纲中的展开/折叠状态
+        // 接口：/api/storage/setOutlineStorage
+        // 参数：docID(文档ID)、val.expandIds(展开的标题节点ID列表)
+        // 用户下次打开同一文档时，前端会恢复其之前的折叠和展开状态
         if (window.siyuan.config.readonly || window.siyuan.isPublish) {
             return;
         }
@@ -694,6 +715,14 @@ export class Outline extends Model {
 
     /**
      * 应用大纲筛选
+     * 大纲过滤与搜索：通过 setFilter() 方法过滤出包含关键词的大纲标题
+     * 算法：
+     * 1. 当用户输入关键词时，记录当前的展开/折叠状态到 preFilterExpandIds
+     * 2. 递归遍历所有标题节点 (processUL)：
+     *    - 如果标题文本包含关键词，则显示该标题并展开其所有子标题
+     *    - 如果标题文本不包含关键词但其子级有匹配，则显示该标题并展开
+     *    - 如果标题及其子级都无匹配，则隐藏该标题
+     * 3. 当清空关键词后，恢复筛选前的折叠/展开状态
      */
     private setFilter() {
         // 还原 display
