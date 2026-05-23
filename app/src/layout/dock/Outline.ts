@@ -23,6 +23,7 @@ import {App} from "../../index";
 import {checkFold} from "../../util/noRelyPCFunction";
 import {headingsLevelTransaction, transaction} from "../../protyle/wysiwyg/transaction";
 import {goHome} from "../../protyle/wysiwyg/commonHotkey";
+import {matchHotKey} from "../../protyle/util/hotKey";
 import {Editor} from "../../editor";
 import {mathRender} from "../../protyle/render/mathRender";
 import {genEmptyElement} from "../../block/util";
@@ -165,8 +166,7 @@ export class Outline extends Model {
             click: (element: HTMLElement) => {
                 const id = element.getAttribute("data-node-id");
                 if (this.isSelectableHeading(element)) {
-                    this.clearOutlineSelection();
-                    this.lastSelectedElement = element;
+                    this.replaceOutlineSelection(element);
                 }
                 if (this.isPreview) {
                     const headElement = document.getElementById(id);
@@ -262,6 +262,9 @@ export class Outline extends Model {
         options.tab.panelElement.querySelector('[data-type="expand"]').addEventListener("click", () => {
             this.tree.expandAll();
             this.saveExpendIds();
+        });
+        options.tab.panelElement.addEventListener("keydown", (event) => {
+            this.handleHeadingShortcut(event);
         });
 
         // 保持当前标题展开功能
@@ -829,9 +832,19 @@ export class Outline extends Model {
         return Array.from(this.element.querySelectorAll('li.b3-list-item[data-type="NodeHeading"][data-node-id]')) as HTMLElement[];
     }
 
-    private clearOutlineSelection() {
-        this.selectedHeadingIds.clear();
-        this.applyOutlineSelectionClasses();
+    private getVisibleSelectableHeadingItems() {
+        return this.getSelectableHeadingItems().filter(item => !this.hasHiddenParentList(item));
+    }
+
+    private hasHiddenParentList(element: HTMLElement) {
+        let parent = element.parentElement;
+        while (parent && parent !== this.element) {
+            if (parent.tagName === "UL" && parent.classList.contains("fn__none")) {
+                return true;
+            }
+            parent = parent.parentElement;
+        }
+        return false;
     }
 
     private replaceOutlineSelection(element: HTMLElement) {
@@ -861,7 +874,7 @@ export class Outline extends Model {
         if (!this.isSelectableHeading(element)) {
             return;
         }
-        const headings = this.getSelectableHeadingItems();
+        const headings = this.getVisibleSelectableHeadingItems();
         if (!document.contains(this.lastSelectedElement)) {
             this.lastSelectedElement = null;
         }
@@ -895,17 +908,45 @@ export class Outline extends Model {
         return [];
     }
 
+    private getTopLevelSelectedHeadingIds(fallback: HTMLElement, fallbackId?: string) {
+        const selectedItems = this.getSelectedHeadingItems(fallback);
+        if (selectedItems.length === 0 && fallbackId && this.selectedHeadingIds.has(fallbackId)) {
+            return Array.from(this.selectedHeadingIds);
+        }
+        const selectedIds = new Set(selectedItems.map(item => item.getAttribute("data-node-id")));
+        return selectedItems.filter(item => !this.hasSelectedHeadingAncestor(item, selectedIds)).map(item => item.getAttribute("data-node-id"));
+    }
+
+    private hasSelectedHeadingAncestor(element: HTMLElement, selectedIds: Set<string>) {
+        let parent = element.parentElement;
+        while (parent && parent !== this.element) {
+            if (parent.tagName === "UL") {
+                const headingElement = parent.previousElementSibling as HTMLElement;
+                if (headingElement && selectedIds.has(headingElement.getAttribute("data-node-id"))) {
+                    return true;
+                }
+            }
+            parent = parent.parentElement;
+        }
+        return false;
+    }
+
     private applyOutlineSelectionClasses() {
         const currentIds = new Set<string>();
         this.getSelectableHeadingItems().forEach(item => {
             const id = item.getAttribute("data-node-id");
             currentIds.add(id);
-            item.classList.toggle("b3-list-item--selected", this.selectedHeadingIds.has(id));
         });
         Array.from(this.selectedHeadingIds).forEach(id => {
             if (!currentIds.has(id)) {
                 this.selectedHeadingIds.delete(id);
             }
+        });
+        if (this.selectedHeadingIds.size === 0) {
+            return;
+        }
+        this.getSelectableHeadingItems().forEach(item => {
+            item.classList.toggle("b3-list-item--focus", this.selectedHeadingIds.has(item.getAttribute("data-node-id")));
         });
     }
 
@@ -1437,27 +1478,82 @@ export class Outline extends Model {
         return protyle;
     }
 
-    private batchChangeHeadingLevel(direction: TOutlineHeadingLevelDirection, fallbackElement: HTMLElement) {
-        const protyle = this.getProtyle();
-        if (!protyle) {
-            return;
-        }
+    private getHeadingElementsForTransaction(protyle?: IProtyle, fallbackElement?: HTMLElement) {
         const headingElements: HTMLElement[] = [];
         this.getSelectedHeadingItems(fallbackElement).forEach(item => {
             const id = item.getAttribute("data-node-id");
             if (!id) {
                 return;
             }
-            const headingElement = protyle.wysiwyg.element.querySelector(`[data-node-id="${id}"]`) as HTMLElement;
+            const headingElement = protyle?.wysiwyg.element.querySelector(`[data-node-id="${id}"]`) as HTMLElement;
             if (headingElement?.getAttribute("data-type") === "NodeHeading") {
                 headingElements.push(headingElement);
+            } else if (!protyle && item.getAttribute("data-type") === "NodeHeading") {
+                headingElements.push(item);
             }
         });
+        return headingElements;
+    }
+
+    private batchSetHeadingLevel(level: number, fallbackElement?: HTMLElement) {
+        const protyle = this.getProtyle();
+        const headingElements = this.getHeadingElementsForTransaction(protyle, fallbackElement);
+        headingsLevelTransaction({
+            protyle,
+            headingElements,
+            level
+        });
+    }
+
+    private batchChangeHeadingLevel(direction: TOutlineHeadingLevelDirection, fallbackElement: HTMLElement) {
+        const protyle = this.getProtyle();
+        if (!protyle) {
+            return;
+        }
+        const headingElements = this.getHeadingElementsForTransaction(protyle, fallbackElement);
         headingsLevelTransaction({
             protyle,
             headingElements,
             direction
         });
+    }
+
+    private handleHeadingShortcut(event: KeyboardEvent) {
+        if (window.siyuan.config.readonly || event.repeat) {
+            return;
+        }
+        const headingConfig = window.siyuan.config.keymap.editor.heading;
+        for (let level = 1; level <= 6; level++) {
+            const key = `heading${level}` as keyof typeof headingConfig;
+            if ((headingConfig?.[key]?.custom && matchHotKey(headingConfig[key].custom, event)) ||
+                (!headingConfig?.[key]?.custom && event.ctrlKey && event.altKey && event.key === String(level))) {
+                this.batchSetHeadingLevel(level);
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+        }
+        if ((headingConfig?.headingUpgrade?.custom &&
+                matchHotKey(window.siyuan.config.keymap.editor.heading.headingUpgrade.custom, event)) ||
+            (!headingConfig?.headingUpgrade?.custom && event.altKey && !event.ctrlKey && !event.metaKey && ["+", "="].includes(event.key))) {
+            const selectedItems = this.getSelectedHeadingItems();
+            if (selectedItems[0]) {
+                this.batchChangeHeadingLevel("upgrade", selectedItems[0]);
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            return;
+        }
+        if ((headingConfig?.headingDowngrade?.custom &&
+                matchHotKey(window.siyuan.config.keymap.editor.heading.headingDowngrade.custom, event)) ||
+            (!headingConfig?.headingDowngrade?.custom && event.altKey && !event.ctrlKey && !event.metaKey && event.key === "-")) {
+            const selectedItems = this.getSelectedHeadingItems();
+            if (selectedItems[0]) {
+                this.batchChangeHeadingLevel("downgrade", selectedItems[0]);
+                event.preventDefault();
+                event.stopPropagation();
+            }
+        }
     }
 
     private getProtyleAndBlockElement(element: HTMLElement) {
@@ -1502,10 +1598,15 @@ export class Outline extends Model {
                     return;
                 }
 
-                fetchPost("/api/block/getHeadingLevelTransaction", {
+                const selectedHeadingIds = this.getTopLevelSelectedHeadingIds(this.element.querySelector(`li[data-node-id="${id}"]`) as HTMLElement, id);
+                const payload = this.selectedHeadingIds.size > 1 && selectedHeadingIds.includes(id) ? {
+                    ids: selectedHeadingIds,
+                    level
+                } : {
                     id,
                     level
-                }, (response) => {
+                };
+                fetchPost("/api/block/getHeadingLevelTransaction", payload, (response) => {
                     response.data.doOperations.forEach((operation: any, index: number) => {
                         protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`).forEach((itemElement: HTMLElement) => {
                             itemElement.outerHTML = operation.data;

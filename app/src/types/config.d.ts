@@ -1029,6 +1029,8 @@ declare namespace Config {
         heading4: IKey;
         heading5: IKey;
         heading6: IKey;
+        headingUpgrade: IKey;
+        headingDowngrade: IKey;
         paragraph: IKey;
     }
 

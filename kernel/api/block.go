@@ -275,10 +275,22 @@ func getHeadingLevelTransaction(c *gin.Context) {
 		return
 	}
 
-	id := arg["id"].(string)
 	level := int(arg["level"].(float64))
 
-	transaction, err := model.GetHeadingLevelTransaction(id, level)
+	var transaction *model.Transaction
+	var err error
+	if idsArg, ok := arg["ids"].([]any); ok {
+		var ids []string
+		for _, idArg := range idsArg {
+			if id, ok := idArg.(string); ok && "" != id {
+				ids = append(ids, id)
+			}
+		}
+		transaction, err = model.GetHeadingLevelTransactions(ids, level)
+	} else {
+		id := arg["id"].(string)
+		transaction, err = model.GetHeadingLevelTransaction(id, level)
+	}
 	if err != nil {
 		ret.Code = -1
 		ret.Msg = err.Error()
