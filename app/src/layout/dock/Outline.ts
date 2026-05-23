@@ -898,14 +898,15 @@ export class Outline extends Model {
     }
 
     private getSelectedHeadingItems(fallback?: HTMLElement) {
-        const selectedItems = this.getSelectableHeadingItems().filter(item => this.selectedHeadingIds.has(item.getAttribute("data-node-id")));
+        const selectableItems = this.getSelectableHeadingItems();
+        const selectedItems = selectableItems.filter(item => this.selectedHeadingIds.has(item.getAttribute("data-node-id")));
         if (selectedItems.length > 0) {
             return selectedItems;
         }
-        if (fallback && this.isSelectableHeading(fallback)) {
+        if (fallback && selectableItems.includes(fallback)) {
             return [fallback];
         }
-        return [];
+        return selectableItems.filter(item => item.classList.contains("b3-list-item--focus"));
     }
 
     private getTopLevelSelectedHeadingIds(fallback: HTMLElement, fallbackId?: string) {
@@ -1525,10 +1526,12 @@ export class Outline extends Model {
             return false;
         }
         const headingConfig = window.siyuan.config.keymap.editor.heading;
+        const isExplicitExactHeadingShortcut = event.altKey && !event.shiftKey &&
+            ((event.ctrlKey && !event.metaKey) || (event.metaKey && !event.ctrlKey));
         for (let level = 1; level <= 6; level++) {
             const key = `heading${level}` as keyof typeof headingConfig;
             if ((headingConfig?.[key]?.custom && matchHotKey(headingConfig[key].custom, event)) ||
-                (!headingConfig?.[key]?.custom && event.ctrlKey && event.altKey && event.key === String(level))) {
+                (isExplicitExactHeadingShortcut && event.key === String(level))) {
                 this.batchSetHeadingLevel(level);
                 event.preventDefault();
                 event.stopPropagation();

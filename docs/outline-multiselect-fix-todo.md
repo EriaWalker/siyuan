@@ -28,6 +28,8 @@
    - 待修复：keymap registration 加载、实际 keyboard event matching、editor dispatch、Outline dispatch。
    - 验收状态：editor 单 heading、editor range 多 heading、Outline 单选、Outline 多选这些场景仍未跑通。
 
+3. outline 多选标题右键菜单中Transformation with sub-headings功能仍然不可靠，有时好用，但是大多数尝试都会出错，行为和语义不一致，有时都能转换，有时只会转换鼠标右键打开菜单时右键点击的标题。
+
 ## 仍待做
 
 1. 编辑器 range 多 heading -> Outline 多选同步
