@@ -12,18 +12,15 @@ import {getAllModels, getAllTabs, getAllWnds} from "./getAll";
 import {Asset} from "../asset";
 import {Search} from "../search";
 import {Dock} from "./dock";
-import {focusByOffset, focusByRange, getSelectionOffset} from "../protyle/util/selection";
+import {focusByRange} from "../protyle/util/selection";
 import {hideElements} from "../protyle/ui/hideElements";
 import {fetchPost} from "../util/fetch";
-import {hasClosestBlock, hasClosestByClassName} from "../protyle/util/hasClosest";
+import {hasClosestByClassName} from "../protyle/util/hasClosest";
 import {Constants} from "../constants";
 import {saveScroll} from "../protyle/scroll/saveScroll";
 import {Backlink} from "./dock/Backlink";
 import {openFileById} from "../editor/util";
 import {isWindow} from "../util/functions";
-/// #if !BROWSER
-import {setTabPosition} from "../window/setHeader";
-/// #endif
 import {showMessage} from "../dialog/message";
 import {getIdZoomInByPath} from "../util/pathName";
 import {Custom} from "./dock/Custom";
@@ -31,8 +28,9 @@ import {newCardModel} from "../card/newCardTab";
 import {App} from "../index";
 import {afterLoadPlugin} from "../plugin/loader";
 import {setTitle} from "../dialog/processSystem";
-import {newCenterEmptyTab, resizeTabs} from "./tabUtil";
+import {newCenterEmptyTab, resizeTabs, setTabPosition} from "./tabUtil";
 import {setStorageVal} from "../protyle/util/compatibility";
+import {adjustDockPadding} from "./dock/util";
 
 export const setPanelFocus = (element: Element, isSaveLayout = true) => {
     if (element.getAttribute("data-type") === "wnd") {
@@ -68,57 +66,6 @@ export const setPanelFocus = (element: Element, isSaveLayout = true) => {
     }
 };
 
-export const switchWnd = (newWnd: Wnd, targetWnd: Wnd) => {
-    // DOM 移动后 range 会变化
-    const rangeDatas: {
-        id: string,
-        start: number,
-        end: number
-    }[] = [];
-    targetWnd.children.forEach((item) => {
-        if (item.model instanceof Editor && item.model.editor.protyle.toolbar.range) {
-            const blockElement = hasClosestBlock(item.model.editor.protyle.toolbar.range.startContainer);
-            if (blockElement) {
-                const startEnd = getSelectionOffset(blockElement, undefined, item.model.editor.protyle.toolbar.range);
-                rangeDatas.push({
-                    id: blockElement.getAttribute("data-node-id"),
-                    start: startEnd.start,
-                    end: startEnd.end
-                });
-            }
-        }
-    });
-    newWnd.element.after(targetWnd.element);
-    targetWnd.children.forEach((item) => {
-        if (item.model instanceof Editor) {
-            const rangeData = rangeDatas.splice(0, 1)[0];
-            if (!rangeData) {
-                return;
-            }
-            const range = focusByOffset(item.model.editor.protyle.wysiwyg.element.querySelector(`[data-node-id="${rangeData.id}"]`), rangeData.start, rangeData.end);
-            if (range) {
-                item.model.editor.protyle.toolbar.range = range;
-            }
-        }
-    });
-    // 分隔线
-    newWnd.element.after(newWnd.element.previousElementSibling);
-    newWnd.parent.children.find((item, index) => {
-        if (item.id === newWnd.id) {
-            const tempResize = newWnd.parent.children[index].resize;
-            newWnd.parent.children[index].resize = newWnd.parent.children[index - 1].resize;
-            newWnd.parent.children[index - 1].resize = tempResize;
-            const temp = item;
-            newWnd.parent.children[index] = newWnd.parent.children[index - 1];
-            newWnd.parent.children[index - 1] = temp;
-            return true;
-        }
-    });
-    /// #if !BROWSER
-    setTabPosition();
-    /// #endif
-};
-
 export const getWndByLayout: (layout: Layout) => Wnd = (layout: Layout) => {
     const wndsTemp: Wnd[] = [];
     getAllWnds(layout, wndsTemp);
@@ -133,7 +80,10 @@ const dockToJSON = (dock: Dock) => {
     const json = [];
     const subDockToJSON = (index: number) => {
         const data: Config.IUILayoutDockTab[] = [];
-        dock.element.querySelectorAll(`span[data-index="${index}"]`).forEach(item => {
+        dock.elements[index].querySelectorAll(".dock__item").forEach(item => {
+            if (!item.getAttribute("data-type")) {
+                return;
+            }
             data.push({
                 type: item.getAttribute("data-type"),
                 size: {
@@ -301,6 +251,7 @@ const JSONToDock = (json: any, app: App) => {
     window.siyuan.layout.leftDock = new Dock({position: "Left", data: json.left, app});
     window.siyuan.layout.rightDock = new Dock({position: "Right", data: json.right, app});
     window.siyuan.layout.bottomDock = new Dock({position: "Bottom", data: json.bottom, app});
+    adjustDockPadding();
 };
 
 const removedTabs: Tab[] = [];
@@ -522,7 +473,10 @@ export const JSONToLayout = (app: App, isStart: boolean) => {
         afterLoadPlugin(item);
     });
     saveLayout();
-    resizeTopBar();
+    // 等待 dock 面板动画结束
+    setTimeout(() => {
+        setTabPosition();
+    }, Constants.TIMEOUT_TRANSITION);
 };
 
 export const layoutToJSON = (layout: Layout | Wnd | Tab | Model, json: any, breakObj?: IObject) => {
@@ -707,15 +661,18 @@ export const resizeTopBar = () => {
     }
     barMoreElement.setAttribute("data-hideids", hideIds.join(","));
 
-    const width = dragElement.clientWidth;
-    const dragRect = dragElement.getBoundingClientRect();
-    const left = dragRect.left;
-    const right = window.innerWidth - dragRect.right;
-    if (left > right && left - right < width / 3) {
-        dragElement.style.paddingRight = (left - right) + "px";
-    } else if (left < right && right - left < width / 3) {
-        dragElement.style.paddingLeft = (right - left) + "px";
+    if (!window.siyuan.config.appearance.hideToolbar) {
+        const width = dragElement.clientWidth;
+        const dragRect = dragElement.getBoundingClientRect();
+        const left = dragRect.left;
+        const right = window.innerWidth - dragRect.right;
+        if (left > right && left - right < width / 3) {
+            dragElement.style.paddingRight = (left - right) + "px";
+        } else if (left < right && right - left < width / 3) {
+            dragElement.style.paddingLeft = (right - left) + "px";
+        }
     }
+
     window.siyuan.storage[Constants.LOCAL_PLUGINTOPUNPIN].forEach((id: string) => {
         toolbarElement.querySelector("#" + id)?.classList.add("fn__none");
     });
@@ -757,7 +714,8 @@ export const newModelByInitData = (app: App, tab: Tab, json: any) => {
             blockId: json.blockId,
             mode: json.mode,
             scrollPosition: json.scrollPosition,
-            action: typeof json.action === "string" ? (json.action ? [json.action, Constants.CB_GET_FOCUS] : [Constants.CB_GET_FOCUS]) : json.action.concat(Constants.CB_GET_FOCUS),
+            action: Array.isArray(json.action) ? json.action.concat(Constants.CB_GET_FOCUS) :
+                (json.action ? [json.action, Constants.CB_GET_FOCUS] : [Constants.CB_GET_FOCUS]),
         });
     }
     return model;
@@ -790,7 +748,7 @@ export const getInstanceById = (id: string, layout = window.siyuan.layout.center
     return _getInstanceById(layout, id);
 };
 
-export const addResize = (obj: Layout | Wnd) => {
+export const addResize = (obj: Layout | Wnd, after = true) => {
     if (!obj.resize) {
         return;
     }
@@ -823,6 +781,7 @@ export const addResize = (obj: Layout | Wnd) => {
 
         let range: Range;
         resizeElement.addEventListener("mousedown", (event: MouseEvent) => {
+            event.preventDefault();
             getAllModels().editor.forEach((item) => {
                 if (item.editor && item.editor.protyle && item.element.parentElement) {
                     hideElements(["gutter"], item.editor.protyle);
@@ -880,6 +839,9 @@ export const addResize = (obj: Layout | Wnd) => {
                     nextNowSize < 64 && nextNowSize < nextSize) {
                     return;
                 }
+                if (nextElement.classList.contains("layout__center") && nextNowSize <= 148) {
+                    return;
+                }
                 if (!previousElement.classList.contains("fn__flex-1")) {
                     previousElement.style[direction === "lr" ? "width" : "height"] = previousNowSize + "px";
                 }
@@ -895,6 +857,7 @@ export const addResize = (obj: Layout | Wnd) => {
                 documentSelf.onselectstart = null;
                 documentSelf.onselect = null;
                 adjustLayout(isWindow() ? window.siyuan.layout.centerLayout : undefined);
+                setTabPosition(true);
                 resizeTabs();
                 if (!isWindow()) {
                     window.siyuan.layout.leftDock.setSize();
@@ -917,7 +880,12 @@ export const addResize = (obj: Layout | Wnd) => {
         resizeElement.classList.add("layout__resize--lr");
     }
     resizeElement.classList.add("layout__resize");
-    obj.element.insertAdjacentElement("beforebegin", resizeElement);
+    if (after) {
+        obj.element.insertAdjacentElement((obj.element.previousElementSibling && !obj.element.previousElementSibling.classList.contains("layout__resize")) ?
+            "beforebegin" : "afterend", resizeElement);
+    } else {
+        obj.element.insertAdjacentElement("afterend", resizeElement);
+    }
     resizeWnd(resizeElement, obj.resize);
 
     resizeElement.addEventListener("dblclick", () => {
@@ -985,11 +953,18 @@ export const adjustLayout = (layout: Layout = window.siyuan.layout.centerLayout.
         } else {
             item.element.style.minWidth = "";
         }
+
+        if (!item.element.style.height && !item.element.classList.contains("layout__center") &&
+            item.element.classList.contains("fn__flex-column")) {
+            item.element.style.minHeight = "8px";
+        } else {
+            item.element.style.minHeight = "";
+        }
     });
     if (layout.direction === "lr" && layout.element.scrollWidth > layout.element.clientWidth + 2) {
         let index = Math.ceil(screen.width / 8);
         while (index > 0) {
-            let width = 0;
+            let width = layout.element.firstElementChild.classList.contains("layout__dockl") ? 8 : 0;
             layout.children.find((item: Layout | Wnd) => {
                 if (item.element.style.width && item.element.style.width !== "0px") {
                     item.element.style.maxWidth = Math.max(Math.min(item.element.clientWidth, window.innerWidth) - 8, 64) + "px";

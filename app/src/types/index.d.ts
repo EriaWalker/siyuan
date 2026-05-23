@@ -1,6 +1,6 @@
 type TPluginDockPosition = "LeftTop" | "LeftBottom" | "RightTop" | "RightBottom" | "BottomLeft" | "BottomRight"
 type TDockPosition = "Left" | "Right" | "Bottom"
-type TWS = "main" | "filetree" | "protyle"
+type TWS = "main" | "filetree" | "protyle" | "backlink" | "bookmark" | "graph" | "outline" | "tag"
 type TDock = "file" | "outline" | "inbox" | "bookmark" | "tag" | "graph" | "globalGraph" | "backlink"
 type TTab = "Outline" | "Graph" | "Backlink" | "Asset" | "Editor" | "Search" | "siyuan-card"
 type TOperation =
@@ -225,6 +225,7 @@ interface Window {
     webkit: {
         nativeCallbacks: { [key: string]: (id: number) => void },
         messageHandlers: {
+            saveExportFile: { postMessage: (url: string) => void }
             openLink: { postMessage: (url: string) => void }
             startKernelFast: { postMessage: (url: string) => void }
             changeStatusBar: { postMessage: (url: string) => void }
@@ -252,6 +253,7 @@ interface Window {
         returnDesktop(): void
         openExternal(url: string): void
         exportByDefault(url: string): void
+        saveExportFile(url: string): void
         changeStatusBarColor(color: string, mode: number): void
         writeClipboard(text: string): void
         writeHTMLClipboard(text: string, html: string): void
@@ -275,6 +277,7 @@ interface Window {
         hideKeyboard(): void
         openExternal(url: string): void
         exportByDefault(url: string): void
+        saveExportFile(url: string): void
         changeStatusBarColor(color: string, mode: number): void
         writeClipboard(text: string): void
         writeHTMLClipboard(text: string, html: string): void
@@ -293,13 +296,15 @@ interface Window {
 
     Protyle: import("../protyle/method").default;
 
+    lockscreenByMode(): void;
+
     goBack(): void;
 
     showMessage(message: string, timeout: number, type: string, messageId?: string): void;
 
     reconnectWebSocket(): void;
 
-    showKeyboardToolbar(height: number): void;
+    showKeyboardToolbar(): void;
 
     processIOSPurchaseResponse(code: number): void;
 
@@ -512,6 +517,7 @@ interface ISiyuan {
     emojis?: IEmoji[],
     backStack?: IBackStack[],
     mobile?: {
+        touchRange?: Range
         size: {
             isLandscape?: boolean,
             landscape?: {
@@ -555,6 +561,8 @@ interface ISiyuan {
     },
     dragElement?: HTMLElement,
     currentDragOverTabHeadersElement?: HTMLElement
+    touchDragActive?: boolean,
+    touchDragGhost?: HTMLElement | null,
     layout?: {
         layout?: import("../layout").Layout,
         centerLayout?: import("../layout").Layout,

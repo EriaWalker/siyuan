@@ -41,6 +41,7 @@ export class Graph extends Model {
         super({
             app: options.app,
             id: options.tab.id,
+            type: "graph",
             callback() {
                 if (this.type === "local") {
                     fetchPost("/api/block/checkBlockExist", {id: this.blockId}, existResponse => {
@@ -265,9 +266,7 @@ export class Graph extends Model {
 <button class="b3-button b3-button--small fn__block">${window.siyuan.languages.reset}</button>`;
         }
         this.element.innerHTML = `<div class="block__icons"> 
-    <div class="block__logo fn__flex-1">
-        <svg class="block__logoicon"><use xlink:href="#icon${this.type === "global" ? "GlobalGraph" : "Graph"}"></use></svg>${this.type === "global" ? window.siyuan.languages.globalGraph : window.siyuan.languages.graphView}
-    </div>
+    <div class="block__logo fn__flex-1">${this.type === "global" ? window.siyuan.languages.globalGraph : window.siyuan.languages.graphView}</div>
     <input class="b3-text-field search__label fn__size200 fn__none" placeholder="${window.siyuan.languages.search}" />
     <span data-type="search" class="block__icon ariaLabel" data-position="north" aria-label="${window.siyuan.languages.search}"><svg><use xlink:href='#iconFilter'></use></svg></span>
     <span class="fn__space"></span>
@@ -314,11 +313,11 @@ export class Graph extends Model {
                     if (dataType === "min") {
                         getDockByType(this.type === "global" ? "globalGraph" : "graph").toggleModel(this.type === "global" ? "globalGraph" : "graph", false, true);
                     } else if (dataType === "menu") {
-                        if (target.classList.contains("ft__primary")) {
-                            target.classList.remove("ft__primary");
+                        if (target.classList.contains("block__icon--active")) {
+                            target.classList.remove("block__icon--active");
                             this.panelElement.style.right = "";
                         } else {
-                            target.classList.add("ft__primary");
+                            target.classList.add("block__icon--active");
                             this.panelElement.style.right = "0";
                         }
                     } else if (dataType === "search") {
@@ -339,8 +338,8 @@ export class Graph extends Model {
                     }
                     break;
                 } else if (target.classList.contains("graph__svg")) {
-                    this.element.querySelectorAll(".block__icon.ft__primary").forEach(item => {
-                        item.classList.remove("ft__primary");
+                    this.element.querySelectorAll(".block__icon.block__icon--active").forEach(item => {
+                        item.classList.remove("block__icon--active");
                     });
                     this.panelElement.style.right = "";
                     break;
@@ -601,6 +600,7 @@ export class Graph extends Model {
                 autoResize: true,
                 interaction: {
                     hover: true,
+                    zoomSpeed: 0.5, // 1 is default
                 },
                 nodes: {
                     borderWidth: 0,

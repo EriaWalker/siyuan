@@ -7,7 +7,7 @@ import {
 } from "../../protyle/util/hasClosest";
 import {moveToDown, moveToUp} from "../../protyle/wysiwyg/move";
 import {Constants} from "../../constants";
-import {focusByRange, getSelectionPosition} from "../../protyle/util/selection";
+import {focusBlock, focusByRange, getSelectionPosition} from "../../protyle/util/selection";
 import {getCurrentEditor} from "../editor";
 import {fontEvent, getFontNodeElements} from "../../protyle/toolbar/Font";
 import {hideElements} from "../../protyle/ui/hideElements";
@@ -15,6 +15,7 @@ import {softEnter} from "../../protyle/wysiwyg/enter";
 import {isInAndroid, isInEdge, isInHarmony} from "../../protyle/util/compatibility";
 import {tabCodeBlock} from "../../protyle/wysiwyg/codeBlock";
 import {callMobileAppShowKeyboard, canInput, keyboardLockUntil} from "./mobileAppUtil";
+import {isNotEditBlock} from "../../protyle/wysiwyg/getBlock";
 
 let renderKeyboardToolbarTimeout: number;
 let showUtil = false;
@@ -234,7 +235,7 @@ const renderSlashMenu = (protyle: IProtyle, toolbarElement: Element) => {
 <div class="keyboard__slash-block">
     ${getSlashItem(Constants.ZWSP + 3, "iconDownload", window.siyuan.languages.insertAsset + '<input class="b3-form__upload" type="file"' + (protyle.options.upload.accept ? (' multiple="' + protyle.options.upload.accept + '"') : "") + "/>", "true")}
     ${isInAndroid() ? getSlashItem(Constants.ZWSP + 3, "iconCamera", window.siyuan.languages.insertPhoto + '<input class="b3-form__upload" capture="user" type="file"' + (protyle.options.upload.accept ? (' multiple="' + protyle.options.upload.accept + '"') : "") + "/>", "true") : ""}
-    ${getSlashItem('<iframe sandbox="allow-forms allow-presentation allow-same-origin allow-scripts allow-modals allow-popups" src="" border="0" frameborder="no" framespacing="0" allowfullscreen="true"></iframe>', "iconLanguage", window.siyuan.languages.insertIframeURL, "true")}
+    ${getSlashItem('<iframe sandbox="allow-forms allow-presentation allow-same-origin allow-scripts allow-modals allow-popups allow-storage-access-by-user-activation" src="" border="0" frameborder="no" framespacing="0" allowfullscreen="true"></iframe>', "iconGlobe", window.siyuan.languages.insertIframeURL, "true")}
     ${getSlashItem("![]()", "iconImage", window.siyuan.languages.insertImgURL, "true")}
     ${getSlashItem('<video controls="controls" src=""></video>', "iconVideo", window.siyuan.languages.insertVideoURL, "true")}
     ${getSlashItem('<audio controls="controls" src=""></audio>', "iconRecord", window.siyuan.languages.insertAudioURL, "true")}
@@ -440,13 +441,24 @@ export const showKeyboardToolbar = () => {
     setTimeout(() => {
         const contentElement = hasClosestByClassName(range.startContainer, "protyle-content", true);
         if (contentElement) {
-            const contentTop = contentElement.getBoundingClientRect().top;
-            const cursorTop = getSelectionPosition(contentElement).top;
-            if (cursorTop < window.innerHeight - 42 && cursorTop > contentTop) {
+            let cursorTop = getSelectionPosition(contentElement).top;
+            if (cursorTop < 0 && window.siyuan.mobile.touchRange) {
+                const rangeBlockElement = hasClosestBlock(window.siyuan.mobile.touchRange.startContainer);
+                if (rangeBlockElement) {
+                    if (isNotEditBlock(rangeBlockElement)) {
+                        focusBlock(rangeBlockElement);
+                    } else {
+                        focusByRange(window.siyuan.mobile.touchRange);
+                    }
+                    cursorTop = getSelectionPosition(contentElement, window.siyuan.mobile.touchRange).top;
+                }
+            }
+            if (cursorTop < window.innerHeight - 42 && cursorTop > contentElement.getBoundingClientRect().top) {
                 return;
             }
             contentElement.scroll({
-                top: contentElement.scrollTop + cursorTop - window.innerHeight + 42 + 26,
+                top: cursorTop < 0 ? contentElement.scrollTop + window.innerHeight - 42 :
+                    contentElement.scrollTop + cursorTop - window.innerHeight + 42 + 26,
                 left: contentElement.scrollLeft,
                 behavior: "smooth"
             });
@@ -496,9 +508,10 @@ export const activeBlur = () => {
 export const initKeyboardToolbar = () => {
     let preventRender = false;
     document.addEventListener("selectionchange", () => {
-        if (!preventRender) {
-            renderKeyboardToolbar();
+        if (preventRender || (getCurrentEditor()?.protyle?.toolbar.isMultiSelectMode())) {
+            return;
         }
+        renderKeyboardToolbar();
     }, false);
     window.siyuan.mobile.size.isLandscape = window.matchMedia && window.matchMedia("(orientation: landscape)").matches;
     if (window.siyuan.mobile.size.isLandscape) {
@@ -587,7 +600,7 @@ export const initKeyboardToolbar = () => {
             <button class="keyboard__action" data-type="clear"><svg><use xlink:href="#iconClear"></use></svg></button>
             <button class="keyboard__action" data-type="code"><svg><use xlink:href="#iconInlineCode"></use></svg></button>
             <button class="keyboard__action" data-type="kbd"<use xlink:href="#iconKeymap"></use></svg></button>
-            <button class="keyboard__action" data-type="tag"><svg><use xlink:href="#iconTags"></use></svg></button>
+            <button class="keyboard__action" data-type="tag"><svg><use xlink:href="#iconTag"></use></svg></button>
             <button class="keyboard__action" data-type="inline-math"><svg><use xlink:href="#iconMath"></use></svg></button>
             <button class="keyboard__action" data-type="inline-memo"><svg><use xlink:href="#iconM"></use></svg></button>
             <button class="keyboard__action" data-type="goback"><svg><use xlink:href="#iconCloseRound"></use></svg></button>
@@ -731,6 +744,13 @@ export const initKeyboardToolbar = () => {
                 renderTextMenu(protyle, toolbarElement);
                 showKeyboardToolbarUtil(oldScrollTop);
                 window.JSAndroid?.hideKeyboard();
+                setTimeout(() => {
+                    focusByRange(range);
+                    preventRender = true;
+                    setTimeout(() => {
+                        preventRender = false;
+                    }, 1000);
+                }, Constants.TIMEOUT_TRANSITION);
             }
             return;
         } else if (type === "moveup") {

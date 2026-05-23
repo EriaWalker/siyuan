@@ -87,14 +87,17 @@ func initDatabase(forceRebuild bool) {
 	}
 
 	initDBConnection()
+	initIndexQueue()
 	treenode.InitBlockTree(forceRebuild)
 
 	if !forceRebuild {
 		// 检查数据库结构版本，如果版本不一致的话说明改过表结构，需要重建
 		if util.DatabaseVer == getDatabaseVer() {
+			recoverIndexQueue()
 			return
 		}
 		logging.LogInfof("the database structure is changed, rebuilding database...")
+		clearIndexQueueEntries()
 	}
 
 	// 不存在库或者版本不一致都会走到这里
@@ -149,7 +152,7 @@ func initDBTables() {
 	if err != nil {
 		logging.LogFatalf(logging.ExitCodeUnavailableDatabase, "drop table [blocks_fts] failed: %s", err)
 	}
-	_, err = db.Exec("CREATE VIRTUAL TABLE blocks_fts USING fts5(id UNINDEXED, parent_id UNINDEXED, root_id UNINDEXED, hash UNINDEXED, box UNINDEXED, path UNINDEXED, hpath, name, alias, memo, tag, content, fcontent, markdown UNINDEXED, length UNINDEXED, type UNINDEXED, subtype UNINDEXED, ial, sort UNINDEXED, created UNINDEXED, updated UNINDEXED, tokenize=\"siyuan\")")
+	_, err = db.Exec("CREATE VIRTUAL TABLE blocks_fts USING fts5(id UNINDEXED, parent_id UNINDEXED, root_id UNINDEXED, hash UNINDEXED, box UNINDEXED, path UNINDEXED, hpath UNINDEXED, name, alias, memo, tag, content, fcontent, markdown UNINDEXED, length UNINDEXED, type UNINDEXED, subtype UNINDEXED, ial, sort UNINDEXED, created UNINDEXED, updated UNINDEXED, tokenize=\"siyuan\")")
 	if err != nil {
 		logging.LogFatalf(logging.ExitCodeUnavailableDatabase, "create table [blocks_fts] failed: %s", err)
 	}
@@ -158,7 +161,7 @@ func initDBTables() {
 	if err != nil {
 		logging.LogFatalf(logging.ExitCodeUnavailableDatabase, "drop table [blocks_fts_case_insensitive] failed: %s", err)
 	}
-	_, err = db.Exec("CREATE VIRTUAL TABLE blocks_fts_case_insensitive USING fts5(id UNINDEXED, parent_id UNINDEXED, root_id UNINDEXED, hash UNINDEXED, box UNINDEXED, path UNINDEXED, hpath, name, alias, memo, tag, content, fcontent, markdown UNINDEXED, length UNINDEXED, type UNINDEXED, subtype UNINDEXED, ial, sort UNINDEXED, created UNINDEXED, updated UNINDEXED, tokenize=\"siyuan case_insensitive\")")
+	_, err = db.Exec("CREATE VIRTUAL TABLE blocks_fts_case_insensitive USING fts5(id UNINDEXED, parent_id UNINDEXED, root_id UNINDEXED, hash UNINDEXED, box UNINDEXED, path UNINDEXED, hpath UNINDEXED, name, alias, memo, tag, content, fcontent, markdown UNINDEXED, length UNINDEXED, type UNINDEXED, subtype UNINDEXED, ial, sort UNINDEXED, created UNINDEXED, updated UNINDEXED, tokenize=\"siyuan case_insensitive\")")
 	if err != nil {
 		logging.LogFatalf(logging.ExitCodeUnavailableDatabase, "create table [blocks_fts_case_insensitive] failed: %s", err)
 	}
@@ -1003,12 +1006,12 @@ func deleteBlocksByIDs(tx *sql.Tx, ids []string) (err error) {
 		return
 	}
 
-	stmt = "DELETE FROM blocks_fts WHERE ROWID IN (" + strings.Join(rowIDs, ",") + ")"
-	if err = execStmtTx(tx, stmt); err != nil {
-		return
-	}
-
-	if !caseSensitive {
+	if caseSensitive {
+		stmt = "DELETE FROM blocks_fts WHERE ROWID IN (" + strings.Join(rowIDs, ",") + ")"
+		if err = execStmtTx(tx, stmt); err != nil {
+			return
+		}
+	} else {
 		stmt = "DELETE FROM blocks_fts_case_insensitive WHERE ROWID IN (" + strings.Join(rowIDs, ",") + ")"
 		if err = execStmtTx(tx, stmt); err != nil {
 			return
@@ -1022,11 +1025,12 @@ func deleteBlocksByBoxTx(tx *sql.Tx, box string) (err error) {
 	if err = execStmtTx(tx, stmt, box); err != nil {
 		return
 	}
-	stmt = "DELETE FROM blocks_fts WHERE box = ?"
-	if err = execStmtTx(tx, stmt, box); err != nil {
-		return
-	}
-	if !caseSensitive {
+	if caseSensitive {
+		stmt = "DELETE FROM blocks_fts WHERE box = ?"
+		if err = execStmtTx(tx, stmt, box); err != nil {
+			return
+		}
+	} else {
 		stmt = "DELETE FROM blocks_fts_case_insensitive WHERE box = ?"
 		if err = execStmtTx(tx, stmt, box); err != nil {
 			return
@@ -1121,11 +1125,12 @@ func deleteByRootID(tx *sql.Tx, rootID string, context map[string]any) (err erro
 	if err = execStmtTx(tx, stmt, rootID); err != nil {
 		return
 	}
-	stmt = "DELETE FROM blocks_fts WHERE root_id = ?"
-	if err = execStmtTx(tx, stmt, rootID); err != nil {
-		return
-	}
-	if !caseSensitive {
+	if caseSensitive {
+		stmt = "DELETE FROM blocks_fts WHERE root_id = ?"
+		if err = execStmtTx(tx, stmt, rootID); err != nil {
+			return
+		}
+	} else {
 		stmt = "DELETE FROM blocks_fts_case_insensitive WHERE root_id = ?"
 		if err = execStmtTx(tx, stmt, rootID); err != nil {
 			return
@@ -1167,11 +1172,12 @@ func batchDeleteByRootIDs(tx *sql.Tx, rootIDs []string, context map[string]any) 
 	if err = execStmtTx(tx, stmt); err != nil {
 		return
 	}
-	stmt = "DELETE FROM blocks_fts WHERE root_id IN " + ids
-	if err = execStmtTx(tx, stmt); err != nil {
-		return
-	}
-	if !caseSensitive {
+	if caseSensitive {
+		stmt = "DELETE FROM blocks_fts WHERE root_id IN " + ids
+		if err = execStmtTx(tx, stmt); err != nil {
+			return
+		}
+	} else {
 		stmt = "DELETE FROM blocks_fts_case_insensitive WHERE root_id IN " + ids
 		if err = execStmtTx(tx, stmt); err != nil {
 			return
@@ -1207,11 +1213,12 @@ func batchDeleteByPathPrefix(tx *sql.Tx, boxID, pathPrefix string) (err error) {
 	if err = execStmtTx(tx, stmt, boxID, pathPrefix+"%"); err != nil {
 		return
 	}
-	stmt = "DELETE FROM blocks_fts WHERE box = ? AND path LIKE ?"
-	if err = execStmtTx(tx, stmt, boxID, pathPrefix+"%"); err != nil {
-		return
-	}
-	if !caseSensitive {
+	if caseSensitive {
+		stmt = "DELETE FROM blocks_fts WHERE box = ? AND path LIKE ?"
+		if err = execStmtTx(tx, stmt, boxID, pathPrefix+"%"); err != nil {
+			return
+		}
+	} else {
 		stmt = "DELETE FROM blocks_fts_case_insensitive WHERE box = ? AND path LIKE ?"
 		if err = execStmtTx(tx, stmt, boxID, pathPrefix+"%"); err != nil {
 			return
@@ -1242,21 +1249,47 @@ func batchDeleteByPathPrefix(tx *sql.Tx, boxID, pathPrefix string) (err error) {
 }
 
 func batchUpdatePath(tx *sql.Tx, tree *parse.Tree, context map[string]any) (err error) {
-	ialContent := treenode.IALStr(tree.Root)
-	stmt := "UPDATE blocks SET box = ?, path = ?, hpath = ?, ial = ? WHERE root_id = ?"
-	if err = execStmtTx(tx, stmt, tree.Box, tree.Path, tree.HPath, ialContent, tree.ID); err != nil {
+	stmt := "UPDATE blocks SET box = ?, path = ?, hpath = ? WHERE root_id = ?"
+	if err = execStmtTx(tx, stmt, tree.Box, tree.Path, tree.HPath, tree.ID); err != nil {
 		return
 	}
-	stmt = "UPDATE blocks_fts SET box = ?, path = ?, hpath = ?, ial = ? WHERE root_id = ?"
-	if err = execStmtTx(tx, stmt, tree.Box, tree.Path, tree.HPath, ialContent, tree.ID); err != nil {
-		return
-	}
-	if !caseSensitive {
-		stmt = "UPDATE blocks_fts_case_insensitive SET box = ?, path = ?, hpath = ?, ial = ? WHERE root_id = ?"
-		if err = execStmtTx(tx, stmt, tree.Box, tree.Path, tree.HPath, ialContent, tree.ID); err != nil {
+	if caseSensitive {
+		stmt = "UPDATE blocks_fts SET box = ?, path = ?, hpath = ? WHERE root_id = ?"
+		if err = execStmtTx(tx, stmt, tree.Box, tree.Path, tree.HPath, tree.ID); err != nil {
+			return
+		}
+	} else {
+		stmt = "UPDATE blocks_fts_case_insensitive SET box = ?, path = ?, hpath = ? WHERE root_id = ?"
+		if err = execStmtTx(tx, stmt, tree.Box, tree.Path, tree.HPath, tree.ID); err != nil {
 			return
 		}
 	}
+
+	stmt = "UPDATE spans SET box = ?, path = ? WHERE root_id = ?"
+	if err = execStmtTx(tx, stmt, tree.Box, tree.Path, tree.ID); err != nil {
+		return
+	}
+	stmt = "UPDATE assets SET box = ?, docpath = ? WHERE root_id = ?"
+	if err = execStmtTx(tx, stmt, tree.Box, tree.Path, tree.ID); err != nil {
+		return
+	}
+	stmt = "UPDATE refs SET box = ?, path = ? WHERE root_id = ?"
+	if err = execStmtTx(tx, stmt, tree.Box, tree.Path, tree.ID); err != nil {
+		return
+	}
+	stmt = "UPDATE refs SET def_block_path = ? WHERE def_block_root_id = ?"
+	if err = execStmtTx(tx, stmt, tree.Path, tree.ID); err != nil {
+		return
+	}
+	stmt = "UPDATE file_annotation_refs SET box = ?, path = ? WHERE root_id = ?"
+	if err = execStmtTx(tx, stmt, tree.Box, tree.Path, tree.ID); err != nil {
+		return
+	}
+	stmt = "UPDATE attributes SET box = ?, path = ? WHERE root_id = ?"
+	if err = execStmtTx(tx, stmt, tree.Box, tree.Path, tree.ID); err != nil {
+		return
+	}
+
 	ClearCache()
 	evtHash := fmt.Sprintf("%x", sha256.Sum256([]byte(tree.ID)))[:7]
 	eventbus.Publish(eventbus.EvtSQLUpdateBlocksHPaths, context, 1, evtHash)
@@ -1264,21 +1297,23 @@ func batchUpdatePath(tx *sql.Tx, tree *parse.Tree, context map[string]any) (err 
 }
 
 func batchUpdateHPath(tx *sql.Tx, tree *parse.Tree, context map[string]any) (err error) {
-	ialContent := treenode.IALStr(tree.Root)
-	stmt := "UPDATE blocks SET hpath = ?, ial = ? WHERE root_id = ?"
-	if err = execStmtTx(tx, stmt, tree.HPath, ialContent, tree.ID); err != nil {
+	stmt := "UPDATE blocks SET hpath = ? WHERE root_id = ?"
+	if err = execStmtTx(tx, stmt, tree.HPath, tree.ID); err != nil {
 		return
 	}
-	stmt = "UPDATE blocks_fts SET hpath = ?, ial = ? WHERE root_id = ?"
-	if err = execStmtTx(tx, stmt, tree.HPath, ialContent, tree.ID); err != nil {
-		return
-	}
-	if !caseSensitive {
-		stmt = "UPDATE blocks_fts_case_insensitive SET hpath = ?, ial = ? WHERE root_id = ?"
-		if err = execStmtTx(tx, stmt, tree.HPath, ialContent, tree.ID); err != nil {
+
+	if caseSensitive {
+		stmt = "UPDATE blocks_fts SET hpath = ? WHERE root_id = ?"
+		if err = execStmtTx(tx, stmt, tree.HPath, tree.ID); err != nil {
+			return
+		}
+	} else {
+		stmt = "UPDATE blocks_fts_case_insensitive SET hpath = ? WHERE root_id = ?"
+		if err = execStmtTx(tx, stmt, tree.HPath, tree.ID); err != nil {
 			return
 		}
 	}
+
 	ClearCache()
 	evtHash := fmt.Sprintf("%x", sha256.Sum256([]byte(tree.ID)))[:7]
 	eventbus.Publish(eventbus.EvtSQLUpdateBlocksHPaths, context, 1, evtHash)
@@ -1286,6 +1321,7 @@ func batchUpdateHPath(tx *sql.Tx, tree *parse.Tree, context map[string]any) (err
 }
 
 func CloseDatabase() {
+	closeIndexQueue()
 	if err := db.Close(); err != nil {
 		logging.LogErrorf("close database failed: %s", err)
 	}
@@ -1474,6 +1510,7 @@ func prepareExecInsertTx(tx *sql.Tx, stmtSQL string, args []any) (err error) {
 		logging.LogErrorf("exec database stmt [%s] failed: %s\n  %s", stmtSQL, err, logging.ShortStack())
 
 		if strings.Contains(err.Error(), "database disk image is malformed") {
+			closeDatabase()
 			util.RemoveDatabaseFile(util.DBPath)
 			initDatabase(true)
 			logging.LogFatalf(logging.ExitCodeUnavailableDatabase, "database disk image [%s] is malformed, please restart SiYuan kernel to rebuild it\n\t%s\n\t%v", util.DBPath, stmtSQL, args)
@@ -1489,6 +1526,8 @@ func execStmtTx(tx *sql.Tx, stmt string, args ...any) (err error) {
 		logging.LogErrorf("exec database stmt [%s] failed: %s\n  %s", stmt, err, logging.ShortStack())
 
 		if strings.Contains(err.Error(), "database disk image is malformed") {
+			closeDatabase()
+			util.RemoveDatabaseFile(util.DBPath)
 			initDatabase(true)
 			logging.LogFatalf(logging.ExitCodeUnavailableDatabase, "database disk image [%s] is malformed, please restart SiYuan kernel to rebuild it\n\t%s\n\t%v", util.DBPath, stmt, args)
 		}
@@ -1549,7 +1588,9 @@ func closeDatabase() {
 		return
 	}
 
-	db.Close()
+	if err := db.Close(); err != nil {
+		logging.LogErrorf("close database failed: %s", err)
+	}
 	debug.FreeOSMemory()
 	db = nil
 	runtime.GC()
@@ -1583,6 +1624,9 @@ func SQLTemplateFuncs(templateFuncMap *template.FuncMap) {
 		return
 	}
 	(*templateFuncMap)["querySQL"] = func(stmt string) (ret []map[string]any) {
+		if err := CheckSingleStatement(stmt); err != nil {
+			return
+		}
 		ret, _ = Query(stmt, 1024)
 		return
 	}

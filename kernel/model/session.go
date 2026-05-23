@@ -55,8 +55,10 @@ func LogoutAuth(c *gin.Context) {
 	util.RemoveWorkspaceSession(session)
 	if err := session.Save(c); err != nil {
 		logging.LogErrorf("saves session failed: " + err.Error())
-		ret.Code = -1
-		ret.Msg = "save session failed"
+		session.Clear(c)
+		ret.Code = 1
+		ret.Msg = Conf.Language(258)
+		return
 	}
 
 	util.BroadcastByType("main", "logoutAuth", 0, "", nil)
@@ -98,7 +100,9 @@ func LoginAuth(c *gin.Context) {
 			workspaceSession.Captcha = gulu.Rand.String(7) // https://github.com/siyuan-note/siyuan/issues/13147
 			if err := session.Save(c); err != nil {
 				logging.LogErrorf("save session failed: " + err.Error())
-				c.Status(http.StatusInternalServerError)
+				session.Clear(c)
+				ret.Code = 1
+				ret.Msg = Conf.Language(258)
 				return
 			}
 			return
@@ -149,7 +153,9 @@ func LoginAuth(c *gin.Context) {
 	logging.LogInfof("auth success [ip=%s, maxAge=%d]", util.GetRemoteAddr(c.Request), maxAge)
 	if err := session.Save(c); err != nil {
 		logging.LogErrorf("save session failed: " + err.Error())
-		c.Status(http.StatusInternalServerError)
+		session.Clear(c)
+		ret.Code = 1
+		ret.Msg = Conf.Language(258)
 		return
 	}
 
@@ -251,7 +257,7 @@ func CheckAuth(c *gin.Context) {
 	//logging.LogInfof("check auth for [%s]", c.Request.RequestURI)
 	localhost := util.IsLocalHost(c.Request.RemoteAddr)
 
-	// 未设置访问授权码
+	// 未设置锁屏密码
 	if "" == Conf.AccessAuthCode {
 		// Skip the empty access authorization code check https://github.com/siyuan-note/siyuan/issues/9709
 		if util.SiYuanAccessAuthCodeBypass {
@@ -270,7 +276,7 @@ func CheckAuth(c *gin.Context) {
 			("" != host && !util.IsLocalHost(host)) ||
 			("" != origin && !util.IsLocalOrigin(origin) && !strings.HasPrefix(origin, "chrome-extension://")) ||
 			("" != forwardedHost && !util.IsLocalHost(forwardedHost)) {
-			c.JSON(http.StatusUnauthorized, map[string]any{"code": -1, "msg": "Auth failed: for security reasons, please set [Access authorization code] when using non-127.0.0.1 access\n\n为安全起见，使用非 127.0.0.1 访问时请设置 [访问授权码]"})
+			c.JSON(http.StatusUnauthorized, map[string]any{"code": -1, "msg": "Auth failed: for security reasons, please set [Lock screen password] when using non-127.0.0.1 access\n\n为安全起见，使用非 127.0.0.1 访问时请设置 [锁屏密码]"})
 			c.Abort()
 			return
 		}
@@ -306,7 +312,7 @@ func CheckAuth(c *gin.Context) {
 			return
 		}
 		if strings.HasPrefix(c.Request.RequestURI, "/api/sync/performSync") {
-			if util.ContainerIOS == util.Container || util.ContainerAndroid == util.Container || util.ContainerHarmony == util.Container {
+			if util.IsMobileContainer() {
 				c.Set(RoleContextKey, RoleAdministrator)
 				c.Next()
 				return
@@ -325,7 +331,7 @@ func CheckAuth(c *gin.Context) {
 
 	// 通过 BasicAuth (header: Authorization)
 	if username, password, ok := c.Request.BasicAuth(); ok {
-		// 使用访问授权码作为密码
+		// 使用锁屏密码作为密码
 		if util.WorkspaceName == username && Conf.AccessAuthCode == password {
 			c.Set(RoleContextKey, RoleAdministrator)
 			c.Next()

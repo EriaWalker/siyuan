@@ -6,7 +6,7 @@ import {blockRender} from "../render/blockRender";
 import {processRender} from "../util/processCode";
 import {highlightRender} from "../render/highlightRender";
 import {hasClosestBlock, hasClosestByAttribute, hasTopClosestByAttribute, isInEmbedBlock} from "../util/hasClosest";
-import {setFold, zoomOut} from "../../menus/protyle";
+import {zoomOut} from "../../menus/protyle";
 import {disabledProtyle, enableProtyle, onGet} from "../util/onGet";
 /// #if !MOBILE
 import {getAllModels} from "../../layout/getAll";
@@ -21,6 +21,7 @@ import {isPaidUser, needSubscribe} from "../../util/needSubscribe";
 import {resize} from "../util/resize";
 import {processClonePHElement} from "../render/util";
 import {scrollCenter} from "../../util/highlightById";
+import {setFold} from "../util/blockFold";
 
 const removeTopElement = (updateElement: Element, protyle: IProtyle) => {
     // 移动到其他文档中，该块需移除
@@ -80,7 +81,11 @@ const promiseTransaction = () => {
         }]
     }, (response) => {
         if (window.siyuan.transactions.length === 0) {
-            countBlockWord([], protyle.block.rootID, true);
+            const ids: (string | null)[] = [];
+            protyle.wysiwyg.element.querySelectorAll(".protyle-wysiwyg--select").forEach(item => {
+                ids.push(item.getAttribute("data-node-id"));
+            });
+            countBlockWord(ids, protyle.block.rootID);
         } else {
             promiseTransaction();
         }
@@ -382,9 +387,9 @@ const updateBlock = (updateElements: Element[], protyle: IProtyle, operation: IO
 
 // 用于推送和撤销
 export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: boolean) => {
-   if (protyle.wysiwyg.element.firstElementChild?.classList.contains("protyle-password")) {
-       return;
-   }
+    if (protyle.wysiwyg.element.firstElementChild?.classList.contains("protyle-password")) {
+        return;
+    }
     const updateElements: Element[] = [];
     Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`)).forEach(item => {
         if (!isInEmbedBlock(item)) {
@@ -556,7 +561,7 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: 
             } else if (key === "memo") {
                 memoHTML = `<div class="protyle-attr--memo ariaLabel" aria-label="${escapeHTML}" data-position="north"><svg><use xlink:href="#iconM"></use></svg></div>`;
             } else if (key === "custom-avs" && data.new["av-names"]) {
-                avHTML = `<div class="protyle-attr--av"><svg><use xlink:href="#iconDatabase"></use></svg>${data.new["av-names"]}</div>`;
+                avHTML = `<div class="protyle-attr--av"><svg><use xlink:href="#iconDatabase"></use></svg>${(data.new["av-names"])}</div>`;
             }
         });
         let nodeAttrHTML = bookmarkHTML + nameHTML + aliasHTML + memoHTML + avHTML;
@@ -688,11 +693,17 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: 
         if (updateElements.length === 0) {
             const tempEl = document.createElement("div");
             tempEl.setAttribute("data-node-id", operation.id);
+            tempEl.setAttribute("data-protyle-id", protyle.element.getAttribute("data-id"));
             updateElements.push(tempEl);
             fetchPost("/api/block/getBlockDOM", {
                 id: operation.id,
             }, (response) => {
-                document.querySelector(`[data-node-id="${operation.id}"]`).outerHTML = response.data.dom;
+                document.querySelectorAll(`.protyle-wysiwyg [data-node-id="${response.data.id}"]`).forEach(item => {
+                    if (item.getAttribute("data-protyle-id")) {
+                        item.outerHTML = response.data.dom;
+                        item.removeAttribute("data-protyle-id");
+                    }
+                });
             });
         }
         let range;
@@ -1374,7 +1385,7 @@ export const transaction = (protyle: IProtyle, doOperations: IOperation[], undoO
 
     const lastTransaction = window.siyuan.transactions[window.siyuan.transactions.length - 1];
     let needDebounce = false;
-    const time = new Date().getTime();
+    const time = Date.now();
     if (lastTransaction && lastTransaction.doOperations.length === 1 && lastTransaction.doOperations[0].action === "update" &&
         doOperations.length === 1 && doOperations[0].action === "update" &&
         lastTransaction.doOperations[0].id === doOperations[0].id &&

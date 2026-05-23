@@ -1,12 +1,7 @@
 import {Tree} from "../../util/Tree";
 import {fetchPost} from "../../util/fetch";
 import {hasClosestBlock, hasClosestByClassName} from "../../protyle/util/hasClosest";
-import {
-    isInAndroid,
-    isInHarmony,
-    setStorageVal,
-    writeText
-} from "../../protyle/util/compatibility";
+import {isInAndroid, isInHarmony, setStorageVal, writeText} from "../../protyle/util/compatibility";
 import {Constants} from "../../constants";
 import {MenuItem} from "../../menus/Menu";
 import {getPreviousBlock} from "../../protyle/wysiwyg/getBlock";
@@ -35,6 +30,7 @@ export class MobileOutline extends Model {
         super({
             app: options.app,
             id: genUUID(),
+            type: "outline",
             msgCallback(data) {
                 if (data) {
                     switch (data.cmd) {
@@ -54,7 +50,7 @@ export class MobileOutline extends Model {
     <div class="toolbar__text">
         ${window.siyuan.languages.outline}
     </div>
-    <div class="fn__flex-1 fn__space"></div>
+    <div class="fn__space"></div>
     <input class="b3-text-field search__label fn__none fn__size200" placeholder="${window.siyuan.languages.filterKeywordEnter}" />
     <svg data-type="search" class="toolbar__icon"><use xlink:href='#iconFilter'></use></svg>
     <svg data-type="keepCurrentExpand" class="toolbar__icon${window.siyuan.storage[Constants.LOCAL_OUTLINE].keepCurrentExpand ? " toolbar__icon--active" : ""}"><use xlink:href="#iconFocus"></use></svg>
