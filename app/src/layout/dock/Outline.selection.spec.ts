@@ -169,6 +169,7 @@ vi.mock("../../util/functions", () => ({
     isMobile: vi.fn(() => false),
 }));
 
+import {getAllModels} from "../getAll";
 import {Outline} from "./Outline";
 
 const makeOutline = () => {
@@ -258,6 +259,26 @@ const dispatchCtrlAltNumber = (outline: Outline, key: "1" | "2" | "6") => {
     }));
 };
 
+const makeEditorHeading = (id: string, level: number, text: string) => {
+    return `<div data-node-id="${id}" data-type="NodeHeading" data-subtype="h${level}" class="h${level}">${text}</div>`;
+};
+
+const useEditorHeadings = (html: string) => {
+    const wysiwygElement = document.createElement("div");
+    wysiwygElement.innerHTML = html;
+    vi.mocked(getAllModels).mockReturnValue({
+        editor: [{
+            editor: {
+                protyle: {
+                    block: {rootID: "root"},
+                    wysiwyg: {element: wysiwygElement},
+                },
+            },
+        }],
+    } as never);
+    return wysiwygElement;
+};
+
 describe("Outline heading selection", () => {
     beforeEach(() => {
         document.body.innerHTML = "";
@@ -306,6 +327,7 @@ describe("Outline heading selection", () => {
                 "local-outline": {keepCurrentExpand: false},
             },
         };
+        vi.mocked(getAllModels).mockReturnValue({editor: []} as never);
     });
 
     afterEach(() => {
@@ -371,6 +393,17 @@ describe("Outline heading selection", () => {
         expect(batchSelectedIds(outline)).toEqual(["parent-a", "parent-b"]);
     });
 
+    it("multi-selecting two Outline headings immediately enters the primary multi-selection visual state", () => {
+        const outline = makeOutline();
+        outline.tree.updateData(makeHeadingTree());
+
+        clickHeading(outline, "parent-a");
+        clickHeading(outline, "parent-b", true);
+
+        expect(selectedIds(outline)).toEqual(["parent-a", "parent-b"]);
+        expect(outline.element.classList.contains("sy__outline--multi-select")).toBe(true);
+    });
+
     it("Ctrl/Cmd click on an already selected heading toggles only that heading", () => {
         const outline = makeOutline();
         outline.tree.updateData(makeHeadingTree());
@@ -393,7 +426,29 @@ describe("Outline heading selection", () => {
         expect(batchSelectedIds(outline)).toEqual(["parent-a"]);
     });
 
+    it("Outline single H3 + Ctrl+Alt+1 calls the exact H1 heading-level transaction path", () => {
+        useEditorHeadings(makeEditorHeading("parent-a", 3, "Parent A"));
+        const outline = makeOutline();
+        outline.tree.updateData(makeHeadingTree());
+
+        clickHeading(outline, "parent-a");
+        dispatchCtrlAltNumber(outline, "1");
+
+        expect(mocks.headingsLevelTransaction).toHaveBeenCalledWith(expect.objectContaining({
+            headingElements: [
+                expect.objectContaining({
+                    dataset: expect.objectContaining({
+                        nodeId: "parent-a",
+                        subtype: "h3",
+                    }),
+                }),
+            ],
+            level: 1,
+        }));
+    });
+
     it("Ctrl+Alt+2 with one selected Outline heading calls the exact H2 heading-level path for that heading", () => {
+        useEditorHeadings(makeEditorHeading("parent-a", 3, "Parent A"));
         const outline = makeOutline();
         outline.tree.updateData(makeHeadingTree());
 
@@ -401,27 +456,31 @@ describe("Outline heading selection", () => {
         dispatchCtrlAltNumber(outline, "2");
 
         expect(mocks.headingsLevelTransaction).toHaveBeenCalledWith(expect.objectContaining({
-            headingElements: [expect.objectContaining({
-                dataset: expect.objectContaining({nodeId: "parent-a"}),
-            })],
+            headingElements: [
+                expect.objectContaining({dataset: expect.objectContaining({nodeId: "parent-a"})}),
+            ],
             level: 2,
         }));
     });
 
-    it("Ctrl+Alt+2 with multiple selected Outline headings calls the exact H2 batch heading-level path for all selected headings", () => {
+    it("Outline multi-selected H2/H3 + Ctrl+Alt+6 calls the exact H6 batch heading-level path for both headings", () => {
+        useEditorHeadings([
+            makeEditorHeading("parent-a", 2, "Parent A"),
+            makeEditorHeading("parent-b", 3, "Parent B"),
+        ].join(""));
         const outline = makeOutline();
         outline.tree.updateData(makeHeadingTree());
 
         clickHeading(outline, "parent-a");
         clickHeading(outline, "parent-b", true);
-        dispatchCtrlAltNumber(outline, "2");
+        dispatchCtrlAltNumber(outline, "6");
 
         expect(mocks.headingsLevelTransaction).toHaveBeenCalledWith(expect.objectContaining({
             headingElements: [
                 expect.objectContaining({dataset: expect.objectContaining({nodeId: "parent-a"})}),
                 expect.objectContaining({dataset: expect.objectContaining({nodeId: "parent-b"})}),
             ],
-            level: 2,
+            level: 6,
         }));
     });
 

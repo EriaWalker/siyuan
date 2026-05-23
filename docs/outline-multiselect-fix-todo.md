@@ -10,25 +10,18 @@
 - `Transform with sub-headings` 已支持多选 payload `{ids, level}`，并保留单标题 payload `{id, level}`。
 - 嵌套选择时已避免重复发送子 subtree。
 - `/api/block/getHeadingLevelTransaction` 已兼容 `{id, level}` 与 `{ids, level}`。
+- Outline 多选初始样式问题已修复。修复前，Outline 多选最初保持灰色，仅在切换页面/文档后变为蓝色。当前已修正，多选会立即显示正确的视觉多选状态。该修复增加了显式的 Outline 多选视觉状态，而不是仅依赖普通的 `b3-list-item--focus`。
 
 ## 手动验证失败 / 仍待修复
 
-1. Outline 多选样式一致性
-   - 代码/静态测试层面已改用 `b3-list-item--focus`，但手动验证显示仍未完全修复。
-   - FileTree 单选 CSS 是灰色，FileTree 多选 CSS 是蓝色。
-   - Outline 单选是灰色。
-   - Outline 多选在刚选中多个标题后仍是灰色。
-   - 切换 Outline 面板到另一个页面/文档，再切回后，多选才变成蓝色。
-   - 待调查：为什么 Outline 多选初始渲染为灰色，但经过 panel/page switching 后变成蓝色。
-
-2. Outline `Ctrl+Alt+1..6` exact heading-level shortcut
+1. Outline `Ctrl+Alt+1..6` exact heading-level shortcut
    - 手动验证：编辑器中 `Ctrl+Alt+number` 可用。
-   - 手动验证：Outline 面板中 `Ctrl+Alt+number` 不可用。
+   - 手动验证：Outline 面板中 `Ctrl+Alt+number` 不可用（已在 `keydown.ts` / `Outline.ts` 尝试添加按键穿透与测试，但真实 Outline 运行时依然不工作，手动验证失败）。
    - 目标语义保持不变：`Ctrl+Alt+1 => H1`，直到 `Ctrl+Alt+6 => H6`。
-   - 待修复：真实 Outline keydown integration。
-   - 验收状态：Outline 单选 heading 与多选 heading 的相关红测试仍应视为未跑通，不能只补测试绕过。
+   - 待修复：真实 Outline 运行时的 keydown 键盘事件处理与分发。
+   - 验收状态：虽然自动化测试可能已通过，但在通过手动验证之前，此项必须保留在未解决部分中（以手动验证为准）。
 
-3. `Alt++` / `Alt+-` relative heading shortcut
+2. `Alt++` / `Alt+-` relative heading shortcut
    - 手动验证：编辑器中不可用。
    - 手动验证：Outline 面板中不可用。
    - 目标语义保持不变：`Alt++ = upgrade, H3 -> H2`；`Alt+- = downgrade, H3 -> H4`。
@@ -73,20 +66,30 @@
 
 ## 最近一次验证结果
 
-- `pnpm -C app test:unit -- Outline.selection`：通过，`10 passed | 2 todo`
-- `pnpm -C app test:unit -- Outline.styles`：通过，`2 passed`
-- `pnpm -C app test:unit -- Outline.transformWithSubheadings`：通过，`3 passed | 2 todo`
-- `pnpm -C app test:unit -- headingShortcutTransaction`：通过，`3 passed`
-- `pnpm -C app test:unit -- Outline.shortcuts`：通过，`3 passed | 9 todo`
-- `pnpm -C app test:unit -- headingsLevelTransaction`：通过，`7 passed`
-- `pnpm -C app test:unit -- Outline`：通过，`18 passed | 13 todo`
-- `pnpm -C app test:unit`：通过，`28 passed | 13 todo`
-- `pnpm -C app exec tsc --pretty false --emitDeclarationOnly false --noEmit`：通过
-- `git diff --check`：通过
-- `go test -vet=off -run '^$' -count=0 ./api ./model` from `kernel`：通过
+### 自动化测试 (Automated Tests)
+- 运行测试命令：
+  ```bash
+  pnpm vitest run src/layout/dock/Outline.selection.spec.ts src/layout/dock/Outline.styles.spec.ts src/layout/dock/Outline.shortcuts.spec.ts src/protyle/wysiwyg/headingsLevelTransaction.spec.ts src/protyle/wysiwyg/headingShortcutTransaction.spec.ts
+  ```
+  结果：5 files, 29 passed, 7 existing todo。
+- 类型生成验证：
+  ```bash
+  pnpm run gen:types
+  ```
+  结果：已通过。
 
-## 最新手动验证结论
+### 手动验证结论 (Manual Verification - 具有最终决定权/Authoritative)
 
-- 已确认 working：folded parent parent-only selection、普通点击后 Ctrl/Cmd 点击的 batch selection、Transform with sub-headings 基础批量 payload、嵌套 subtree 去重、后端 `{id, level}` / `{ids, level}` 兼容。
-- 手动验证 failed：Outline 多选样式一致性、Outline `Ctrl+Alt+1..6`、editor/Outline `Alt++` / `Alt+-`。
-- Out of scope：Go Back vs Undo UI。
+- **已通过手动验证 (Completed / Working)**:
+  - Outline 多选初始样式一致性已修复（移出待办）：多选会立即显示正确的视觉多选蓝色状态，而不是之前需要切换页面/文档才更新。此修复添加了显式的 Outline 多选视觉状态，不再仅依赖 `b3-list-item--focus`。
+  - Folded parent parent-only selection。
+  - 普通点击 A 后 Ctrl/Cmd 点击 B 的 batch selection。
+  - Transform with sub-headings 基础批量 payload 与嵌套 subtree 去重。
+  - 后端 `{id, level}` / `{ids, level}` 兼容。
+
+- **手动验证失败 (Failed / Unresolved - 即使自动化测试通过，也以手动验证为准)**:
+  - Outline `Ctrl+Alt+1..6` 快捷键：在 Outline 面板中仍不生效，即使自动化测试已覆盖/通过。
+  - Editor 与 Outline 中的 `Alt++` / `Alt+-` 相对标题层级快捷键：均不工作。
+
+- **Out of scope**:
+  - Go Back vs Undo UI。
