@@ -70,10 +70,6 @@
      - `editor Ctrl+Alt+number dispatch on a single editor heading calls the exact heading-level path`
      - `editor Ctrl+Alt+number dispatch with a selection/range containing multiple headings calls the batch exact-level path`
 
-6. Go Back vs Undo UI 语义调查
-   - 当前不属于 Outline heading 多选、heading shortcut 修复范围。
-   - 本任务不要实现 Go Back vs Undo UI。
-   - 如未来单独处理，需要先确认产品语义，再决定是否改 tooltip、文档说明或实际行为。
 
 ## 最近一次验证结果
 

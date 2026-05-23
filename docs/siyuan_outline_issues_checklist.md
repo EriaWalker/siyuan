@@ -188,16 +188,7 @@ Alt+- = downgrade, H3 -> H4
 - 修复 editor dispatch 与 Outline dispatch。
 - 增加覆盖：editor 单 heading、editor range 多 heading、Outline 单选、Outline 多选。
 
-## 8. Go Back vs Undo UI
-
-### 当前状态
-
-- 明确不属于当前 Outline heading shortcut/multiselect 工作。
-- 本任务不要实现 Go Back vs Undo UI。
-- 当前没有新增 Go Back vs Undo 相关测试。
-- 如果未来单独处理，需要先确认产品语义：该按钮是否本来就是 navigation back、是否只是 tooltip/文案造成混淆、是否实际应接入 Undo。
-
-## 9. 已完成 / 已验证 / 手动失败
+## 8. 已完成 / 已验证 / 手动失败
 
 ### 已通过自动测试
 
@@ -232,7 +223,7 @@ Alt+- = downgrade, H3 -> H4
 - `go test ./api ./model` 在当前机器上触发 repo 既有 vet 报错，集中在 unrelated non-constant format string 调用。
 - 使用 `-vet=off` 的 build-only check 可以通过，说明本轮 Go API/model 改动可编译。
 
-## 10. 剩余待办
+## 9. 剩余待办
 
 - 抽 `getHeadingIdsInEditorRange(range, root)` 或同等 helper，支持编辑器 range 内多个 heading 映射到 Outline 多选。
 - 抽 `collectHeadingBlocksForShortcut(...)` 或同等 helper，统一 editor/Outline shortcut heading 收集。
@@ -241,4 +232,3 @@ Alt+- = downgrade, H3 -> H4
 - 修复真实 Outline `Ctrl+Alt+1..6` keydown integration，并补单选/多选 focused tests。
 - 修复 `Alt++` / `Alt+-` 的 keymap registration、keyboard event matching、editor dispatch、Outline dispatch。
 - 为 `Outline.shortcuts.spec.ts` 中单选/多选 exact shortcuts、relative shortcuts、undo/redo 行为补可执行测试。
-- Go Back vs Undo UI 不属于本任务，不作为当前实现 todo。
