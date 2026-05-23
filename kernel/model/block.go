@@ -816,6 +816,43 @@ func GetHeadingLevelTransaction(id string, level int) (transaction *Transaction,
 	return
 }
 
+func GetHeadingLevelTransactions(ids []string, level int) (transaction *Transaction, err error) {
+	transaction = &Transaction{}
+	if 0 == len(ids) {
+		return
+	}
+
+	seenDoOperations := map[string]bool{}
+	seenUndoOperations := map[string]bool{}
+	for _, id := range ids {
+		itemTransaction, itemErr := GetHeadingLevelTransaction(id, level)
+		if itemErr != nil {
+			err = itemErr
+			return
+		}
+		if nil == itemTransaction {
+			continue
+		}
+		for _, op := range itemTransaction.DoOperations {
+			key := op.Action + ":" + op.ID
+			if seenDoOperations[key] {
+				continue
+			}
+			seenDoOperations[key] = true
+			transaction.DoOperations = append(transaction.DoOperations, op)
+		}
+		for _, op := range itemTransaction.UndoOperations {
+			key := op.Action + ":" + op.ID
+			if seenUndoOperations[key] {
+				continue
+			}
+			seenUndoOperations[key] = true
+			transaction.UndoOperations = append(transaction.UndoOperations, op)
+		}
+	}
+	return
+}
+
 func GetBlockDOM(id string) (ret string) {
 	if "" == id {
 		return
