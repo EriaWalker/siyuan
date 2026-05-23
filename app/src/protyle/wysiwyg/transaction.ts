@@ -1099,6 +1099,85 @@ const removeUnfoldRepeatBlock = (html: string, protyle: IProtyle) => {
     });
 };
 
+export const headingsLevelTransaction = (options: {
+    protyle: IProtyle,
+    headingElements: HTMLElement[],
+    direction: "upgrade" | "downgrade",
+    range?: Range
+}) => {
+    options.protyle.observerLoad?.disconnect();
+    const doOperations: IOperation[] = [];
+    const headingUndoOperations: IOperation[] = [];
+    const foldUndoOperations: IOperation[] = [];
+    const changedIds: string[] = [];
+    const lute = options.protyle.lute as unknown as {
+        Blocks2Hs: (html: string, level: number) => string
+    };
+    options.headingElements.forEach(item => {
+        if (item.getAttribute("data-type") !== "NodeHeading") {
+            return;
+        }
+        const id = item.getAttribute("data-node-id");
+        const currentLevel = parseInt(item.getAttribute("data-subtype")?.replace("h", "") || "0");
+        if (!id || currentLevel < 1 || currentLevel > 6) {
+            return;
+        }
+        const targetLevel = options.direction === "upgrade" ? Math.max(1, currentLevel - 1) : Math.min(6, currentLevel + 1);
+        if (targetLevel === currentLevel) {
+            return;
+        }
+        const oldHTML = item.outerHTML;
+        let newHTML = lute.Blocks2Hs(oldHTML, targetLevel);
+        const tempElement = document.createElement("template");
+        tempElement.innerHTML = newHTML;
+        const newElement = tempElement.content.querySelector(`[data-node-id="${id}"]`) as HTMLElement;
+        if (!newElement || newElement.getAttribute("data-type") !== "NodeHeading") {
+            return;
+        }
+        let foldData;
+        if (item.getAttribute("fold") === "1" && newElement.getAttribute("data-subtype") !== item.dataset.subtype) {
+            foldData = setFold(options.protyle, item, undefined, undefined, false, true);
+            newHTML = newHTML.replace(' fold="1"', "");
+        }
+        if (foldData && foldData.doOperations?.length > 0) {
+            doOperations.push(...foldData.doOperations);
+        }
+        headingUndoOperations.push({
+            action: "update",
+            id,
+            data: oldHTML,
+        });
+        doOperations.push({
+            action: "update",
+            id,
+            data: newHTML
+        });
+        if (foldData && foldData.undoOperations?.length > 0) {
+            foldUndoOperations.push(...foldData.undoOperations);
+        }
+        changedIds.push(id);
+        item.outerHTML = newHTML;
+    });
+    if (doOperations.length === 0) {
+        return;
+    }
+    const undoOperations = [
+        ...headingUndoOperations.reverse(),
+        ...foldUndoOperations.reverse(),
+    ];
+    transaction(options.protyle, doOperations, undoOperations);
+    processRender(options.protyle.wysiwyg.element);
+    highlightRender(options.protyle.wysiwyg.element);
+    avRender(options.protyle.wysiwyg.element, options.protyle);
+    blockRender(options.protyle, options.protyle.wysiwyg.element);
+    if (options.range) {
+        focusByWbr(options.protyle.wysiwyg.element, options.range);
+    } else {
+        focusBlock(options.protyle.wysiwyg.element.querySelector(`[data-node-id="${changedIds[0]}"]`));
+    }
+    hideElements(["gutter"], options.protyle);
+};
+
 export const turnsIntoTransaction = (options: {
     protyle: IProtyle,
     selectsElement?: Element[],
