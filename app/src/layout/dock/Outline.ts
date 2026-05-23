@@ -21,13 +21,15 @@ import {unicode2Emoji} from "../../emoji";
 import {getPreviousBlock} from "../../protyle/wysiwyg/getBlock";
 import {App} from "../../index";
 import {checkFold} from "../../util/noRelyPCFunction";
-import {transaction, turnsIntoTransaction} from "../../protyle/wysiwyg/transaction";
+import {transaction} from "../../protyle/wysiwyg/transaction";
 import {goHome} from "../../protyle/wysiwyg/commonHotkey";
 import {Editor} from "../../editor";
 import {mathRender} from "../../protyle/render/mathRender";
 import {genEmptyElement} from "../../block/util";
 import {focusBlock, focusByWbr} from "../../protyle/util/selection";
 import {dragOverScroll, stopScrollAnimation} from "../../boot/globalEvent/dragover";
+
+type TOutlineHeadingLevelDirection = "upgrade" | "downgrade";
 
 export class Outline extends Model {
     public tree: Tree;
@@ -37,6 +39,8 @@ export class Outline extends Model {
     public blockId: string;
     public isPreview: boolean;
     private preFilterExpandIds: string[] | null = null;
+    private selectedHeadingIds = new Set<string>();
+    private lastSelectedElement: HTMLElement | null = null;
 
     constructor(options: {
         app: App,
@@ -162,6 +166,10 @@ export class Outline extends Model {
             // 点击后：若为预览模式则通过 scrollIntoView 滚动定位；否则打开对应的标题块
             click: (element: HTMLElement) => {
                 const id = element.getAttribute("data-node-id");
+                if (this.isSelectableHeading(element)) {
+                    this.clearOutlineSelection();
+                    this.lastSelectedElement = element;
+                }
                 if (this.isPreview) {
                     const headElement = document.getElementById(id);
                     if (headElement) {
@@ -191,11 +199,15 @@ export class Outline extends Model {
             },
             // 用户交互：Ctrl + 点击大纲标题
             // Ctrl点击箭头时：展开/折叠当前标题的所有子标题
-            // Ctrl点击标题时：聚焦并放大/缩小(Zoom In/Out)该标题块
+            // Ctrl点击标题时：切换批量选择状态
             ctrlClick: (element: HTMLElement, event) => {
                 const arrowElement = hasClosestByClassName(event.target as Element, "b3-list-item__toggle");
                 if (arrowElement && !arrowElement.classList.contains("fn__hidden")) {
                     this.collapseChildren(element);
+                    return;
+                }
+                if (this.isSelectableHeading(element)) {
+                    this.toggleOutlineSelection(element);
                     return;
                 }
                 const id = element.getAttribute("data-node-id");
@@ -214,6 +226,9 @@ export class Outline extends Model {
                 if (arrowElement) {
                     this.collapseSameLevel(element);
                 }
+            },
+            shiftClick: (element: HTMLElement) => {
+                this.selectOutlineRange(element);
             },
             rightClick: (element: HTMLElement, event: MouseEvent) => {
                 this.showContextMenu(element, event);
@@ -691,6 +706,7 @@ export class Outline extends Model {
                 currentElement.classList.add("b3-list-item--focus");
             }
         }
+        this.applyOutlineSelectionClasses();
         this.element.removeAttribute("data-loading");
     }
 
@@ -803,6 +819,97 @@ export class Outline extends Model {
      * @param element li元素
      * @returns 标题级别（1-6）
      */
+    private isSelectableHeading(element: HTMLElement) {
+        return element?.tagName === "LI" &&
+            element.classList.contains("b3-list-item") &&
+            element.getAttribute("data-type") === "NodeHeading" &&
+            !!element.getAttribute("data-node-id");
+    }
+
+    private getSelectableHeadingItems() {
+        return Array.from(this.element.querySelectorAll('li.b3-list-item[data-type="NodeHeading"][data-node-id]')) as HTMLElement[];
+    }
+
+    private clearOutlineSelection() {
+        this.selectedHeadingIds.clear();
+        this.applyOutlineSelectionClasses();
+    }
+
+    private replaceOutlineSelection(element: HTMLElement) {
+        this.selectedHeadingIds.clear();
+        if (this.isSelectableHeading(element)) {
+            this.selectedHeadingIds.add(element.getAttribute("data-node-id"));
+            this.lastSelectedElement = element;
+        }
+        this.applyOutlineSelectionClasses();
+    }
+
+    private toggleOutlineSelection(element: HTMLElement) {
+        if (!this.isSelectableHeading(element)) {
+            return;
+        }
+        const id = element.getAttribute("data-node-id");
+        if (this.selectedHeadingIds.has(id)) {
+            this.selectedHeadingIds.delete(id);
+        } else {
+            this.selectedHeadingIds.add(id);
+        }
+        this.lastSelectedElement = element;
+        this.applyOutlineSelectionClasses();
+    }
+
+    private selectOutlineRange(element: HTMLElement) {
+        if (!this.isSelectableHeading(element)) {
+            return;
+        }
+        const headings = this.getSelectableHeadingItems();
+        if (!document.contains(this.lastSelectedElement)) {
+            this.lastSelectedElement = null;
+        }
+        if (!this.lastSelectedElement) {
+            const selectedElement = headings.find(item => this.selectedHeadingIds.has(item.getAttribute("data-node-id")));
+            this.lastSelectedElement = selectedElement || element;
+        }
+        const startIndex = headings.indexOf(this.lastSelectedElement);
+        const endIndex = headings.indexOf(element);
+        if (startIndex < 0 || endIndex < 0) {
+            this.replaceOutlineSelection(element);
+            return;
+        }
+        this.selectedHeadingIds.clear();
+        const start = Math.min(startIndex, endIndex);
+        const end = Math.max(startIndex, endIndex);
+        for (let i = start; i <= end; i++) {
+            this.selectedHeadingIds.add(headings[i].getAttribute("data-node-id"));
+        }
+        this.applyOutlineSelectionClasses();
+    }
+
+    private getSelectedHeadingItems(fallback?: HTMLElement) {
+        const selectedItems = this.getSelectableHeadingItems().filter(item => this.selectedHeadingIds.has(item.getAttribute("data-node-id")));
+        if (selectedItems.length > 0) {
+            return selectedItems;
+        }
+        if (fallback && this.isSelectableHeading(fallback)) {
+            return [fallback];
+        }
+        return [];
+    }
+
+    private applyOutlineSelectionClasses() {
+        const currentIds = new Set<string>();
+        this.getSelectableHeadingItems().forEach(item => {
+            const id = item.getAttribute("data-node-id");
+            currentIds.add(id);
+            item.classList.toggle("b3-list-item--selected", this.selectedHeadingIds.has(id));
+        });
+        Array.from(this.selectedHeadingIds).forEach(id => {
+            if (!currentIds.has(id)) {
+                this.selectedHeadingIds.delete(id);
+            }
+        });
+    }
+
     private getHeadingLevel(element: HTMLElement) {
         return parseInt(element.getAttribute("data-subtype")?.replace("h", "") || "0");
     }
@@ -920,50 +1027,43 @@ export class Outline extends Model {
         if (this.isPreview) {
             return; // 预览模式下不显示右键菜单
         }
+        if (!this.isSelectableHeading(element)) {
+            return;
+        }
         const currentLevel = this.getHeadingLevel(element);
         window.siyuan.menus.menu.remove();
         window.siyuan.menus.menu.element.setAttribute("data-name", Constants.MENU_OUTLINE_CONTEXT);
         const id = element.getAttribute("data-node-id");
+        if (this.selectedHeadingIds.has(id)) {
+            this.applyOutlineSelectionClasses();
+        } else {
+            this.replaceOutlineSelection(element);
+        }
+        const selectedHeadingItems = this.getSelectedHeadingItems(element);
+        const canUpgrade = selectedHeadingItems.some(item => this.getHeadingLevel(item) > 1);
+        const canDowngrade = selectedHeadingItems.some(item => this.getHeadingLevel(item) < 6);
         if (!window.siyuan.config.readonly) {
             // 升级
-            if (currentLevel > 1) {
-                window.siyuan.menus.menu.append(new MenuItem({
-                    id: "upgrade",
-                    icon: "iconUp",
-                    label: window.siyuan.languages.upgrade,
-                    click: () => {
-                        const data = this.getProtyleAndBlockElement(element);
-                        if (data) {
-                            turnsIntoTransaction({
-                                protyle: data.protyle,
-                                selectsElement: [data.blockElement],
-                                type: "Blocks2Hs",
-                                level: currentLevel - 1
-                            });
-                        }
-                    }
-                }).element);
-            }
+            window.siyuan.menus.menu.append(new MenuItem({
+                id: "upgrade",
+                icon: "iconUp",
+                label: window.siyuan.languages.upgrade,
+                disabled: !canUpgrade,
+                click: () => {
+                    this.batchChangeHeadingLevel("upgrade", element);
+                }
+            }).element);
 
             // 降级
-            if (currentLevel < 6) {
-                window.siyuan.menus.menu.append(new MenuItem({
-                    id: "downgrade",
-                    icon: "iconDown",
-                    label: window.siyuan.languages.downgrade,
-                    click: () => {
-                        const data = this.getProtyleAndBlockElement(element);
-                        if (data) {
-                            turnsIntoTransaction({
-                                protyle: data.protyle,
-                                selectsElement: [data.blockElement],
-                                type: "Blocks2Hs",
-                                level: currentLevel + 1
-                            });
-                        }
-                    }
-                }).element);
-            }
+            window.siyuan.menus.menu.append(new MenuItem({
+                id: "downgrade",
+                icon: "iconDown",
+                label: window.siyuan.languages.downgrade,
+                disabled: !canDowngrade,
+                click: () => {
+                    this.batchChangeHeadingLevel("downgrade", element);
+                }
+            }).element);
 
             // 带子标题转换
             checkFold(id, (zoomIn) => {
@@ -1281,6 +1381,107 @@ export class Outline extends Model {
         window.siyuan.menus.menu.popup({
             x: event.clientX,
             y: event.clientY
+        });
+    }
+
+    private getProtyle() {
+        let protyle: IProtyle;
+        getAllModels().editor.find(editItem => {
+            if (editItem.editor.protyle.block.rootID === this.blockId) {
+                protyle = editItem.editor.protyle;
+                return true;
+            }
+        });
+        return protyle;
+    }
+
+    private batchChangeHeadingLevel(direction: TOutlineHeadingLevelDirection, fallbackElement: HTMLElement) {
+        const protyle = this.getProtyle();
+        if (!protyle) {
+            return;
+        }
+        const updates: Array<{
+            id: string,
+            targetLevel: number
+        }> = [];
+        this.getSelectedHeadingItems(fallbackElement).forEach(item => {
+            const id = item.getAttribute("data-node-id");
+            const currentLevel = this.getHeadingLevel(item);
+            if (!id || currentLevel < 1 || currentLevel > 6) {
+                return;
+            }
+            const targetLevel = direction === "upgrade" ? Math.max(1, currentLevel - 1) : Math.min(6, currentLevel + 1);
+            if (targetLevel !== currentLevel) {
+                updates.push({
+                    id,
+                    targetLevel
+                });
+            }
+        });
+        if (updates.length === 0) {
+            return;
+        }
+        fetchPost("/api/block/getBlockDOMs", {
+            ids: updates.map(item => item.id)
+        }, response => {
+            const doOperations: IOperation[] = [];
+            const undoOperations: IOperation[] = [];
+            const lute = protyle.lute as unknown as {
+                Blocks2Hs: (html: string, level: number) => string
+            };
+            updates.forEach(item => {
+                const oldHTML = response.data?.[item.id];
+                if (!oldHTML) {
+                    return;
+                }
+                const oldTemplate = document.createElement("template");
+                oldTemplate.innerHTML = oldHTML;
+                const oldElement = oldTemplate.content.firstElementChild as HTMLElement;
+                if (!oldElement || oldElement.getAttribute("data-type") !== "NodeHeading") {
+                    return;
+                }
+                let newHTML = lute.Blocks2Hs(oldHTML, item.targetLevel);
+                const newTemplate = document.createElement("template");
+                newTemplate.innerHTML = newHTML;
+                const newElement = newTemplate.content.firstElementChild as HTMLElement;
+                if (!newElement || newElement.getAttribute("data-type") !== "NodeHeading") {
+                    return;
+                }
+                if (oldElement.getAttribute("fold") === "1" && newElement.getAttribute("data-subtype") !== oldElement.getAttribute("data-subtype")) {
+                    newHTML = newHTML.replace(' fold="1"', "");
+                }
+                if (oldHTML === newHTML) {
+                    return;
+                }
+                undoOperations.push({
+                    action: "update",
+                    id: item.id,
+                    data: oldHTML,
+                });
+                doOperations.push({
+                    action: "update",
+                    id: item.id,
+                    data: newHTML
+                });
+            });
+            if (doOperations.length === 0) {
+                return;
+            }
+            doOperations.forEach((operation, index) => {
+                protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`).forEach((itemElement: HTMLElement) => {
+                    itemElement.outerHTML = operation.data;
+                });
+                protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`).forEach((itemElement: HTMLElement) => {
+                    mathRender(itemElement);
+                });
+                if (index === 0) {
+                    const focusElement = protyle.wysiwyg.element.querySelector(`[data-node-id="${operation.id}"]`);
+                    if (focusElement) {
+                        focusElement.scrollIntoView({behavior: "smooth", block: "center"});
+                    }
+                }
+            });
+            transaction(protyle, doOperations, undoOperations);
         });
     }
 
