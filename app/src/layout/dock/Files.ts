@@ -483,7 +483,28 @@ export class Files extends Model {
                 }
             }
         });
+        const dragOverLastObj: {
+            element: HTMLElement,
+            positionY: number,
+            rafId: number,
+            sourceOnlyRoot: boolean,
+        } = {
+            element: null,
+            positionY: null,
+            rafId: null,
+            sourceOnlyRoot: null
+        };
         this.element.addEventListener("dragend", (event) => {
+            if (dragOverLastObj.rafId) {
+                cancelAnimationFrame(dragOverLastObj.rafId);
+                dragOverLastObj.rafId = null;
+            }
+            dragOverLastObj.element = null;
+            dragOverLastObj.positionY = null;
+            dragOverLastObj.sourceOnlyRoot = null;
+            this.element.querySelectorAll(".dragover, .dragover__bottom, .dragover__top").forEach((item: HTMLElement) => {
+                item.classList.remove("dragover", "dragover__bottom", "dragover__top");
+            });
             this.parent.panelElement.classList.remove("sy__file--disablehover");
             this.element.querySelectorAll('.b3-list-item[style*="opacity: 0.38;"]').forEach((item: HTMLElement, index) => {
                 item.style.opacity = "";
@@ -504,17 +525,6 @@ export class Files extends Model {
             });
             /// #endif
         });
-        const dragOverLastObj: {
-            element: HTMLElement,
-            positionY: number,
-            rafId: number,
-            sourceOnlyRoot: boolean,
-        } = {
-            element: null,
-            positionY: null,
-            rafId: null,
-            sourceOnlyRoot: null
-        };
         this.element.addEventListener("dragover", (event: DragEvent & { target: HTMLElement }) => {
             if (window.siyuan.config.readonly || !window.siyuan.dragElement || event.dataTransfer.types.includes(Constants.SIYUAN_DROP_TAB)) {
                 event.preventDefault();
@@ -585,22 +595,17 @@ export class Files extends Model {
                     ) {
                         const nodeRect = liElement.getBoundingClientRect();
                         const dragHeight = nodeRect.height * .2;
+                        liElement.classList.remove("dragover__top", "dragover__bottom", "dragover");
                         if (targetType === "navigation-root" && dragOverLastObj.sourceOnlyRoot) {
                             if (event.clientY > nodeRect.top + nodeRect.height / 2) {
-                                liElement.classList.remove("dragover");
                                 liElement.classList.add("dragover__bottom");
                             } else {
-                                liElement.classList.remove("dragover");
                                 liElement.classList.add("dragover__top");
                             }
                         } else if (event.clientY > nodeRect.bottom - dragHeight) {
-                            liElement.classList.remove("dragover");
                             liElement.classList.add("dragover__bottom");
                         } else if (event.clientY < nodeRect.top + dragHeight) {
-                            liElement.classList.remove("dragover");
                             liElement.classList.add("dragover__top");
-                        } else {
-                            liElement.classList.remove("dragover__top", "dragover__bottom");
                         }
                     }
                     if (liElement.classList.contains("dragover__top") || liElement.classList.contains("dragover__bottom") ||
