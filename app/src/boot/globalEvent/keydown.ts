@@ -23,6 +23,7 @@ import {Editor} from "../../editor";
 import {setEditMode} from "../../protyle/util/setEditMode";
 import {rename} from "../../editor/rename";
 import {Files} from "../../layout/dock/Files";
+import {Outline} from "../../layout/dock/Outline";
 import {newDailyNote} from "../../util/mount";
 import {hideElements} from "../../protyle/ui/hideElements";
 import {fetchPost} from "../../util/fetch";
@@ -991,6 +992,15 @@ const panelTreeKeydown = (app: App, event: KeyboardEvent) => {
     if (activePanelElement.className.indexOf("sy__") === -1) {
         return false;
     }
+    const headingConfig = window.siyuan.config.keymap.editor.heading;
+    const isOutlineHeadingShortcut = activePanelElement.classList.contains("sy__outline") &&
+        !event.repeat && !window.siyuan.config.readonly &&
+        ((event.ctrlKey && event.altKey && /^[1-6]$/.test(event.key)) ||
+            (event.altKey && !event.ctrlKey && !event.metaKey && ["+", "=", "-"].includes(event.key)) ||
+            [1, 2, 3, 4, 5, 6].some(level => headingConfig[`heading${level}` as keyof typeof headingConfig]?.custom &&
+                matchHotKey(headingConfig[`heading${level}` as keyof typeof headingConfig].custom, event)) ||
+            (headingConfig.headingUpgrade?.custom && matchHotKey(headingConfig.headingUpgrade.custom, event)) ||
+            (headingConfig.headingDowngrade?.custom && matchHotKey(headingConfig.headingDowngrade.custom, event)));
 
     let matchCommand = false;
     app.plugins.find(item => {
@@ -1010,7 +1020,7 @@ const panelTreeKeydown = (app: App, event: KeyboardEvent) => {
     }
     if (!matchHotKey(window.siyuan.config.keymap.editor.general.collapse.custom, event) &&
         !matchHotKey(window.siyuan.config.keymap.editor.general.expand.custom, event) &&
-        !event.key.startsWith("Arrow") && event.key !== "Enter") {
+        !isOutlineHeadingShortcut && !event.key.startsWith("Arrow") && event.key !== "Enter") {
         return false;
     }
     if (!event.repeat && matchHotKey(window.siyuan.config.keymap.editor.general.collapse.custom, event)) {
@@ -1037,6 +1047,9 @@ const panelTreeKeydown = (app: App, event: KeyboardEvent) => {
     const model = (getInstanceById(activePanelElement.getAttribute("data-id"), window.siyuan.layout.layout) as Tab)?.model;
     if (!model) {
         return false;
+    }
+    if (isOutlineHeadingShortcut && model instanceof Outline && model.handleHeadingShortcut(event)) {
+        return true;
     }
     let activeItemElement = activePanelElement.querySelector(".b3-list-item--focus");
     if (!activeItemElement) {

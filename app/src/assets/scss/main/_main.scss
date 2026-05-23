@@ -304,6 +304,10 @@ html[data-frontend="browser-desktop"] {
       }
     }
   }
+
+  .sy__outline--multi-select .b3-list--background li.b3-list-item--focus {
+    background-color: var(--b3-theme-primary-lightest);
+  }
 }
 
 .counter {
