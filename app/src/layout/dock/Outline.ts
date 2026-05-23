@@ -1042,6 +1042,48 @@ export class Outline extends Model {
         const selectedHeadingItems = this.getSelectedHeadingItems(element);
         const canUpgrade = selectedHeadingItems.some(item => this.getHeadingLevel(item) > 1);
         const canDowngrade = selectedHeadingItems.some(item => this.getHeadingLevel(item) < 6);
+        if (selectedHeadingItems.length > 1 && this.selectedHeadingIds.has(id)) {
+            const headingSubMenu = [];
+            headingSubMenu.push(this.genHeadingTransform(id, 1));
+            headingSubMenu.push(this.genHeadingTransform(id, 2));
+            headingSubMenu.push(this.genHeadingTransform(id, 3));
+            headingSubMenu.push(this.genHeadingTransform(id, 4));
+            headingSubMenu.push(this.genHeadingTransform(id, 5));
+            headingSubMenu.push(this.genHeadingTransform(id, 6));
+            window.siyuan.menus.menu.append(new MenuItem({
+                id: "upgrade",
+                icon: "iconUp",
+                label: window.siyuan.languages.upgrade,
+                disabled: window.siyuan.config.readonly || !canUpgrade,
+                click: () => {
+                    this.batchChangeHeadingLevel("upgrade", element);
+                }
+            }).element);
+            window.siyuan.menus.menu.append(new MenuItem({
+                id: "downgrade",
+                icon: "iconDown",
+                label: window.siyuan.languages.downgrade,
+                disabled: window.siyuan.config.readonly || !canDowngrade,
+                click: () => {
+                    this.batchChangeHeadingLevel("downgrade", element);
+                }
+            }).element);
+            if (headingSubMenu.length > 0) {
+                window.siyuan.menus.menu.append(new MenuItem({
+                    id: "tWithSubtitle",
+                    type: "submenu",
+                    icon: "iconRefresh",
+                    label: window.siyuan.languages.tWithSubtitle,
+                    disabled: window.siyuan.config.readonly,
+                    submenu: headingSubMenu
+                }).element);
+            }
+            window.siyuan.menus.menu.popup({
+                x: event.clientX,
+                y: event.clientY
+            });
+            return;
+        }
         if (!window.siyuan.config.readonly) {
             // 升级
             window.siyuan.menus.menu.append(new MenuItem({
