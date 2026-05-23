@@ -5,18 +5,6 @@ import {describe, expect, it} from "vitest";
 const readAppFile = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 
 describe("Outline heading shortcuts", () => {
-    it.todo("Ctrl+Alt+1 changes all selected Outline headings to exact H1");
-    // Current Outline has no clean shortcut handler seam to invoke without exposing production internals.
-
-    it.todo("Ctrl+Alt+2 changes all selected Outline headings to exact H2");
-    // Current Outline has no clean shortcut handler seam to invoke without exposing production internals.
-
-    it.todo("Ctrl+Alt+6 changes all selected Outline headings to exact H6");
-    // Current Outline has no clean shortcut handler seam to invoke without exposing production internals.
-
-    it.todo("undo/redo works for Ctrl+Alt+number batch exact-heading-level shortcuts");
-    // Requires the eventual batch heading shortcut to route through the same transaction path as batch upgrade/downgrade.
-
     it("documents Ctrl+Alt+number as the exact heading-level shortcut family", () => {
         const constants = readAppFile("src/constants.ts");
         const editorKeydown = readAppFile("src/protyle/wysiwyg/keydown.ts");
@@ -26,6 +14,16 @@ describe("Outline heading shortcuts", () => {
         expect(constants).toContain('heading6: {default: "⌥⌘6", custom: "⌥⌘6"}');
         expect(editorKeydown).toContain("window.siyuan.config.keymap.editor.heading.heading2.custom");
         expect(editorKeydown).toContain("level: 2");
+    });
+
+    it("routes active Outline panel Ctrl+Alt+number shortcuts through the Outline model", () => {
+        const globalKeydown = readAppFile("src/boot/globalEvent/keydown.ts");
+        const outline = readAppFile("src/layout/dock/Outline.ts");
+
+        expect(globalKeydown).toContain('activePanelElement.classList.contains("sy__outline")');
+        expect(globalKeydown).toContain("model instanceof Outline");
+        expect(globalKeydown).toContain("model.handleHeadingShortcut(event)");
+        expect(outline).toContain("public handleHeadingShortcut(event: KeyboardEvent)");
     });
 
     it("registers Alt++ as heading upgrade", () => {

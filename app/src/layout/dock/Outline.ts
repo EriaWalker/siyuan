@@ -943,8 +943,10 @@ export class Outline extends Model {
             }
         });
         if (this.selectedHeadingIds.size === 0) {
+            this.element.classList.remove("sy__outline--multi-select");
             return;
         }
+        this.element.classList.toggle("sy__outline--multi-select", this.selectedHeadingIds.size > 1);
         this.getSelectableHeadingItems().forEach(item => {
             item.classList.toggle("b3-list-item--focus", this.selectedHeadingIds.has(item.getAttribute("data-node-id")));
         });
@@ -1518,9 +1520,9 @@ export class Outline extends Model {
         });
     }
 
-    private handleHeadingShortcut(event: KeyboardEvent) {
+    public handleHeadingShortcut(event: KeyboardEvent) {
         if (window.siyuan.config.readonly || event.repeat) {
-            return;
+            return false;
         }
         const headingConfig = window.siyuan.config.keymap.editor.heading;
         for (let level = 1; level <= 6; level++) {
@@ -1530,7 +1532,7 @@ export class Outline extends Model {
                 this.batchSetHeadingLevel(level);
                 event.preventDefault();
                 event.stopPropagation();
-                return;
+                return true;
             }
         }
         if ((headingConfig?.headingUpgrade?.custom &&
@@ -1541,8 +1543,9 @@ export class Outline extends Model {
                 this.batchChangeHeadingLevel("upgrade", selectedItems[0]);
                 event.preventDefault();
                 event.stopPropagation();
+                return true;
             }
-            return;
+            return false;
         }
         if ((headingConfig?.headingDowngrade?.custom &&
                 matchHotKey(window.siyuan.config.keymap.editor.heading.headingDowngrade.custom, event)) ||
@@ -1552,8 +1555,10 @@ export class Outline extends Model {
                 this.batchChangeHeadingLevel("downgrade", selectedItems[0]);
                 event.preventDefault();
                 event.stopPropagation();
+                return true;
             }
         }
+        return false;
     }
 
     private getProtyleAndBlockElement(element: HTMLElement) {

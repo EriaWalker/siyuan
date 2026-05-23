@@ -325,6 +325,29 @@ describe("headingsLevelTransaction", () => {
         expect(getHeadingLevels(root)).toEqual({h1: 1, h3: 2, h4: 3});
     });
 
+    it("sets mixed heading levels to an exact target and replays undo/redo as one batch", () => {
+        const root = document.createElement("div");
+        root.innerHTML = [
+            makeHeading("h2", 2, "H2"),
+            makeHeading("h3", 3, "H3"),
+        ].join("");
+        const protyle = createProtyle(root);
+
+        headingsLevelTransaction({
+            protyle,
+            headingElements: getHeadingElements(root, ["h2", "h3"]),
+            level: 6,
+        });
+
+        expect(getHeadingLevels(root)).toEqual({h2: 6, h3: 6});
+        const {doOperations, undoOperations} = getUndoBatch(protyle);
+        expect(doOperations).toHaveLength(2);
+        applyOperations(root, undoOperations);
+        expect(getHeadingLevels(root)).toEqual({h2: 2, h3: 3});
+        applyOperations(root, doOperations);
+        expect(getHeadingLevels(root)).toEqual({h2: 6, h3: 6});
+    });
+
     it("does not create empty transactions for boundary-only operations", () => {
         const upgradeRoot = document.createElement("div");
         upgradeRoot.innerHTML = makeHeading("h1", 1, "H1");
