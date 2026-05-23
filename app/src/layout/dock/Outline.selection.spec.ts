@@ -323,7 +323,7 @@ describe("Outline heading selection", () => {
         (outline as unknown as { lastSelectedElement: HTMLElement }).lastSelectedElement = parentA;
         (outline as unknown as { selectOutlineRange: (element: HTMLElement) => void }).selectOutlineRange(parentB);
 
-        expect(selectedIds(outline, "b3-list-item--selected")).toEqual(["parent-a", "parent-b"]);
+        expect(selectedIds(outline, "b3-list-item--focus")).toEqual(["parent-a", "parent-b"]);
     });
 
     it("selects a folded final parent with the same parent-only rule", () => {
@@ -333,7 +333,7 @@ describe("Outline heading selection", () => {
 
         (outline as unknown as { replaceOutlineSelection: (element: HTMLElement) => void }).replaceOutlineSelection(parentB);
 
-        expect(selectedIds(outline, "b3-list-item--selected")).toEqual(["parent-b"]);
+        expect(selectedIds(outline, "b3-list-item--focus")).toEqual(["parent-b"]);
     });
 
     it.todo("maps an editor DOM selection spanning multiple headings to all outline heading ids");

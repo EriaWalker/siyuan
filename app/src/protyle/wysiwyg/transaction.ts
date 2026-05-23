@@ -1097,9 +1097,13 @@ const removeUnfoldRepeatBlock = (html: string, protyle: IProtyle) => {
 export const headingsLevelTransaction = (options: {
     protyle: IProtyle,
     headingElements: HTMLElement[],
-    direction: "upgrade" | "downgrade",
+    direction?: "upgrade" | "downgrade",
+    level?: number,
     range?: Range
 }) => {
+    if (!options.protyle || !options.headingElements?.length || (!options.direction && !options.level)) {
+        return;
+    }
     options.protyle.observerLoad?.disconnect();
     const doOperations: IOperation[] = [];
     const headingUndoOperations: IOperation[] = [];
@@ -1117,7 +1121,8 @@ export const headingsLevelTransaction = (options: {
         if (!id || currentLevel < 1 || currentLevel > 6) {
             return;
         }
-        const targetLevel = options.direction === "upgrade" ? Math.max(1, currentLevel - 1) : Math.min(6, currentLevel + 1);
+        const targetLevel = options.level ? Math.max(1, Math.min(6, options.level)) :
+            (options.direction === "upgrade" ? Math.max(1, currentLevel - 1) : Math.min(6, currentLevel + 1));
         if (targetLevel === currentLevel) {
             return;
         }

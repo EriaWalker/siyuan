@@ -579,6 +579,8 @@ export abstract class Constants {
                 heading4: {default: "⌥⌘4", custom: "⌥⌘4"},
                 heading5: {default: "⌥⌘5", custom: "⌥⌘5"},
                 heading6: {default: "⌥⌘6", custom: "⌥⌘6"},
+                headingUpgrade: {default: "⌥+", custom: "⌥+"},
+                headingDowngrade: {default: "⌥-", custom: "⌥-"},
             },
             list: {
                 indent: {default: "⇥", custom: "⇥"},
