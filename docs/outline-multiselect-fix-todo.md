@@ -1,6 +1,6 @@
-# Outline 多选后续待做
+# Outline 多选仍待修复事项
 
-> 当前文档只记录上一轮实现后仍需要继续处理的事项。已完成项不再作为 todo 保留。
+> 当前文档记录的是仍需要修复的功能缺口和未跑通的红测试。这里的 todo 不是“补充测试”本身，而是“功能还没正确实现，相关红测试/手动验证还没通过”。已完成项不再作为 todo 保留。
 
 ## 已完成，不再待做
 
@@ -26,39 +26,40 @@
    - 手动验证：Outline 面板中 `Ctrl+Alt+number` 不可用。
    - 目标语义保持不变：`Ctrl+Alt+1 => H1`，直到 `Ctrl+Alt+6 => H6`。
    - 待修复：真实 Outline keydown integration。
-   - 待补测试：Outline 单选 heading 与多选 heading 的 focused tests。
+   - 验收状态：Outline 单选 heading 与多选 heading 的相关红测试仍应视为未跑通，不能只补测试绕过。
 
 3. `Alt++` / `Alt+-` relative heading shortcut
    - 手动验证：编辑器中不可用。
    - 手动验证：Outline 面板中不可用。
    - 目标语义保持不变：`Alt++ = upgrade, H3 -> H2`；`Alt+- = downgrade, H3 -> H4`。
    - 待修复：keymap registration 加载、实际 keyboard event matching、editor dispatch、Outline dispatch。
-   - 待补测试：editor 单 heading、editor range 多 heading、Outline 单选、Outline 多选。
+   - 验收状态：editor 单 heading、editor range 多 heading、Outline 单选、Outline 多选这些场景仍未跑通。
 
 ## 仍待做
 
 1. 编辑器 range 多 heading -> Outline 多选同步
-   - 现状：`Outline.selection.spec.ts` 仍有 todo。
-   - 建议 helper：`getHeadingIdsInEditorRange(range, root): string[]`。
-   - 目标：编辑器 DOM selection/range 跨多个 heading block 时，能收集所有 heading ID，并同步标记 Outline 对应 heading。
+   - 现状：编辑器 DOM selection/range 跨多个 heading block 时，Outline 仍不能同步标记多个 heading。
+   - 待修复：实现 range -> heading IDs 的收集，例如通过 `getHeadingIdsInEditorRange(range, root): string[]`。
+   - 验收标准：相关红测试应能证明跨多个 heading block 的选区会同步到 Outline 多选。
 
 2. Shortcut heading 收集 seam
-   - 现状：`headingShortcutTransaction.spec.ts` 只覆盖 transaction layer；编辑器真实 keydown dispatch 仍缺少干净 unit seam。
-   - 建议 helper：`collectHeadingBlocksForShortcut(rangeOrCurrentBlock, outlineSelectionState)`。
-   - 目标：统一 editor 单 heading、editor range 多 heading、Outline 单选、Outline 多选的 heading collection。
+   - 现状：`headingShortcutTransaction.spec.ts` 只覆盖 transaction layer；真实快捷键路径仍不能稳定拿到要操作的 heading 集合。
+   - 待修复：实现统一收集入口，例如 `collectHeadingBlocksForShortcut(rangeOrCurrentBlock, outlineSelectionState)`。
+   - 验收标准：editor 单 heading、editor range 多 heading、Outline 单选、Outline 多选都能走同一收集语义并通过红测试。
 
-3. Transform with sub-headings undo/redo 深度测试
-   - 现状：`Outline.transformWithSubheadings.spec.ts` 仍有 `undo and redo restore all affected heading subtrees` todo。
-   - 建议 helper：`buildTransformWithSubheadingsTransaction(...)`。
-   - 目标：用纯 helper 或更完整 fixture 验证批量 subtree 转换的 do/undo operations 能完整恢复所有受影响 subtree。
+3. Transform with sub-headings undo/redo 行为
+   - 现状：批量 subtree 转换的基础 payload 已有，但 undo/redo 是否完整恢复所有受影响 subtree 仍未跑通。
+   - 待修复：抽出或实现 `buildTransformWithSubheadingsTransaction(...)` 等真实事务构造路径，而不是只补测试。
+   - 验收标准：红测试应证明 do/undo operations 可以完整恢复所有受影响 subtree。
 
-4. Transform with sub-headings boundary level 测试
-   - 现状：`Outline.transformWithSubheadings.spec.ts` 仍有 `boundary heading levels are handled safely` todo。
-   - 目标：覆盖 H1/H6 边界，不越界、不生成无效 heading level。
+4. Transform with sub-headings boundary level 行为
+   - 现状：H1/H6 边界等级在批量 with-subheadings 路径下仍缺少实际行为保证。
+   - 待修复：确保 H1/H6 边界不越界、不生成无效 heading level。
+   - 验收标准：相关红测试跑通，证明 boundary heading levels are handled safely。
 
-5. Outline shortcut 行为测试补全
-   - 现状：`Outline.shortcuts.spec.ts` 仍有 9 个 todo，且手动验证确认 Outline exact shortcuts 与 editor/Outline relative shortcuts 仍不可用。
-   - 待转成 real tests：
+5. Outline/editor shortcut 行为修复
+   - 现状：`Outline.shortcuts.spec.ts` 仍有 9 个未跑通场景，且手动验证确认 Outline exact shortcuts 与 editor/Outline relative shortcuts 仍不可用。
+   - 待修复场景：
      - `Ctrl+Alt+1 changes all selected Outline headings to exact H1`
      - `Ctrl+Alt+2 changes all selected Outline headings to exact H2`
      - `Ctrl+Alt+6 changes all selected Outline headings to exact H6`
@@ -69,10 +70,6 @@
      - `editor Ctrl+Alt+number dispatch on a single editor heading calls the exact heading-level path`
      - `editor Ctrl+Alt+number dispatch with a selection/range containing multiple headings calls the batch exact-level path`
 
-6. Go Back vs Undo UI 语义调查
-   - 当前不属于 Outline heading 多选、heading shortcut 修复范围。
-   - 本任务不要实现 Go Back vs Undo UI。
-   - 如未来单独处理，需要先确认产品语义，再决定是否改 tooltip、文档说明或实际行为。
 
 ## 最近一次验证结果
 
