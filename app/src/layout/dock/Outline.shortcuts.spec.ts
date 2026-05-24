@@ -16,40 +16,44 @@ describe("Outline heading shortcuts", () => {
         expect(editorKeydown).toContain("level: 2");
     });
 
-    it("routes active Outline panel Ctrl+Alt+number shortcuts through the Outline model", () => {
+    it("routes active Outline panel heading shortcuts through global keydown and Outline actions", () => {
         const globalKeydown = readAppFile("src/boot/globalEvent/keydown.ts");
         const outline = readAppFile("src/layout/dock/Outline.ts");
 
         expect(globalKeydown).toContain('activePanelElement.classList.contains("sy__outline")');
         expect(globalKeydown).toContain("model instanceof Outline");
-        expect(globalKeydown).toContain("model.handleHeadingShortcut(event)");
-        expect(outline).toContain("public handleHeadingShortcut(event: KeyboardEvent)");
+        expect(globalKeydown).toContain("routeOutlineHeadingShortcut(model, event)");
+        expect(globalKeydown).toContain("model.setHeadingLevel(outlineHeadingShortcut.level)");
+        expect(globalKeydown).toContain("model.changeHeadingLevel(outlineHeadingShortcut.direction)");
+        expect(outline).toContain("public setHeadingLevel(level: number");
+        expect(outline).toContain("public changeHeadingLevel(direction: TOutlineHeadingLevelDirection");
+        expect(outline).not.toContain("handleHeadingShortcut(event");
+        expect(outline).not.toContain('options.tab.panelElement.addEventListener("keydown"');
     });
 
-    it("registers Alt++ as heading upgrade", () => {
+    it("registers Alt+= as heading upgrade and does not accept Alt++ in Outline routing", () => {
         const constants = readAppFile("src/constants.ts");
-        const outline = readAppFile("src/layout/dock/Outline.ts");
+        const globalKeydown = readAppFile("src/boot/globalEvent/keydown.ts");
 
-        expect(constants).toContain('headingUpgrade: {default: "⌥+"');
-        expect(outline).toContain('matchHotKey(window.siyuan.config.keymap.editor.heading.headingUpgrade.custom');
+        expect(constants).toContain('headingUpgrade: {default: "⌥=", custom: "⌥="}');
+        expect(globalKeydown).toContain('event.key === "="');
+        expect(globalKeydown).not.toContain('["+", "=", "-"].includes(event.key)');
+        expect(globalKeydown).not.toContain("headingConfig.headingUpgrade");
     });
 
     it("registers Alt+- as heading downgrade", () => {
         const constants = readAppFile("src/constants.ts");
-        const outline = readAppFile("src/layout/dock/Outline.ts");
+        const globalKeydown = readAppFile("src/boot/globalEvent/keydown.ts");
 
         expect(constants).toContain('headingDowngrade: {default: "⌥-"');
-        expect(outline).toContain('matchHotKey(window.siyuan.config.keymap.editor.heading.headingDowngrade.custom');
+        expect(globalKeydown).toContain('event.key === "-"');
     });
 
-    it.todo("Alt++ on one selected Outline heading calls the existing upgrade path");
-    // Alt++ is locked to upgrade, meaning H3 becomes H2. Needs a shortcut handler seam that can be invoked in jsdom.
+    it.todo("Alt+= on one selected Outline heading calls the existing upgrade path through global keydown");
 
-    it.todo("Alt+- on one selected Outline heading calls the existing downgrade path");
-    // Alt+- is locked to downgrade, meaning H3 becomes H4. Needs a shortcut handler seam that can be invoked in jsdom.
+    it.todo("Alt+- on one selected Outline heading calls the existing downgrade path through global keydown");
 
-    it.todo("Alt++ and Alt+- use the batch path for multiple Outline headings");
-    // Needs a public or extracted handler that chooses single vs batch operation from Outline selection state.
+    it.todo("Alt+= and Alt+- use the batch path for multiple Outline headings through global keydown");
 
     it.todo("editor Ctrl+Alt+number dispatch on a single editor heading calls the exact heading-level path");
     // The real handler lives in protyle/wysiwyg/keydown.ts. A clean unit needs extractHeadingShortcutLevel(event, keymap) or collectHeadingBlocksForShortcut(rangeOrCurrentBlock, outlineSelectionState).

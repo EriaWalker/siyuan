@@ -23,7 +23,6 @@ import {App} from "../../index";
 import {checkFold} from "../../util/noRelyPCFunction";
 import {headingsLevelTransaction, transaction} from "../../protyle/wysiwyg/transaction";
 import {goHome} from "../../protyle/wysiwyg/commonHotkey";
-import {matchHotKey} from "../../protyle/util/hotKey";
 import {Editor} from "../../editor";
 import {mathRender} from "../../protyle/render/mathRender";
 import {genEmptyElement} from "../../block/util";
@@ -263,10 +262,6 @@ export class Outline extends Model {
             this.tree.expandAll();
             this.saveExpendIds();
         });
-        options.tab.panelElement.addEventListener("keydown", (event) => {
-            this.handleHeadingShortcut(event);
-        });
-
         // 保持当前标题展开功能
         options.tab.panelElement.querySelector('[data-type="keepCurrentExpand"]').addEventListener("click", (event: MouseEvent & {
             target: Element
@@ -1099,7 +1094,7 @@ export class Outline extends Model {
                 label: window.siyuan.languages.upgrade,
                 disabled: window.siyuan.config.readonly || !canUpgrade,
                 click: () => {
-                    this.batchChangeHeadingLevel("upgrade", element);
+                    this.changeHeadingLevel("upgrade", element);
                 }
             }).element);
             window.siyuan.menus.menu.append(new MenuItem({
@@ -1108,7 +1103,7 @@ export class Outline extends Model {
                 label: window.siyuan.languages.downgrade,
                 disabled: window.siyuan.config.readonly || !canDowngrade,
                 click: () => {
-                    this.batchChangeHeadingLevel("downgrade", element);
+                    this.changeHeadingLevel("downgrade", element);
                 }
             }).element);
             if (headingSubMenu.length > 0) {
@@ -1136,7 +1131,7 @@ export class Outline extends Model {
                 label: window.siyuan.languages.upgrade,
                 disabled: !canUpgrade,
                 click: () => {
-                    this.batchChangeHeadingLevel("upgrade", element);
+                    this.changeHeadingLevel("upgrade", element);
                 }
             }).element);
 
@@ -1147,7 +1142,7 @@ export class Outline extends Model {
                 label: window.siyuan.languages.downgrade,
                 disabled: !canDowngrade,
                 click: () => {
-                    this.batchChangeHeadingLevel("downgrade", element);
+                    this.changeHeadingLevel("downgrade", element);
                 }
             }).element);
 
@@ -1498,71 +1493,35 @@ export class Outline extends Model {
         return headingElements;
     }
 
-    private batchSetHeadingLevel(level: number, fallbackElement?: HTMLElement) {
+    public setHeadingLevel(level: number, fallbackElement?: HTMLElement) {
         const protyle = this.getProtyle();
         const headingElements = this.getHeadingElementsForTransaction(protyle, fallbackElement);
+        if (!protyle || headingElements.length === 0) {
+            return false;
+        }
         headingsLevelTransaction({
             protyle,
             headingElements,
             level
         });
+        return true;
     }
 
-    private batchChangeHeadingLevel(direction: TOutlineHeadingLevelDirection, fallbackElement: HTMLElement) {
+    public changeHeadingLevel(direction: TOutlineHeadingLevelDirection, fallbackElement?: HTMLElement) {
         const protyle = this.getProtyle();
         if (!protyle) {
-            return;
+            return false;
         }
         const headingElements = this.getHeadingElementsForTransaction(protyle, fallbackElement);
+        if (headingElements.length === 0) {
+            return false;
+        }
         headingsLevelTransaction({
             protyle,
             headingElements,
             direction
         });
-    }
-
-    // TODO: 正在检查这段代码是否有问题
-    public handleHeadingShortcut(event: KeyboardEvent) {
-        if (window.siyuan.config.readonly || event.repeat) {
-            return false;
-        }
-        const headingConfig = window.siyuan.config.keymap.editor.heading;
-        const isExplicitExactHeadingShortcut = event.altKey && !event.shiftKey &&
-            ((event.ctrlKey && !event.metaKey) || (event.metaKey && !event.ctrlKey));
-        for (let level = 1; level <= 6; level++) {
-            const key = `heading${level}` as keyof typeof headingConfig;
-            if ((headingConfig?.[key]?.custom && matchHotKey(headingConfig[key].custom, event)) ||
-                (isExplicitExactHeadingShortcut && event.key === String(level))) {
-                this.batchSetHeadingLevel(level);
-                event.preventDefault();
-                event.stopPropagation();
-                return true;
-            }
-        }
-        if ((headingConfig?.headingUpgrade?.custom &&
-                matchHotKey(window.siyuan.config.keymap.editor.heading.headingUpgrade.custom, event)) ||
-            (!headingConfig?.headingUpgrade?.custom && event.altKey && !event.ctrlKey && !event.metaKey && ["+", "="].includes(event.key))) {
-            const selectedItems = this.getSelectedHeadingItems();
-            if (selectedItems[0]) {
-                this.batchChangeHeadingLevel("upgrade", selectedItems[0]);
-                event.preventDefault();
-                event.stopPropagation();
-                return true;
-            }
-            return false;
-        }
-        if ((headingConfig?.headingDowngrade?.custom &&
-                matchHotKey(window.siyuan.config.keymap.editor.heading.headingDowngrade.custom, event)) ||
-            (!headingConfig?.headingDowngrade?.custom && event.altKey && !event.ctrlKey && !event.metaKey && event.key === "-")) {
-            const selectedItems = this.getSelectedHeadingItems();
-            if (selectedItems[0]) {
-                this.batchChangeHeadingLevel("downgrade", selectedItems[0]);
-                event.preventDefault();
-                event.stopPropagation();
-                return true;
-            }
-        }
-        return false;
+        return true;
     }
 
     private getProtyleAndBlockElement(element: HTMLElement) {

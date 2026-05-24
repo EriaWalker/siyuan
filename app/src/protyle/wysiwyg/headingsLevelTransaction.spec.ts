@@ -100,6 +100,14 @@ vi.mock("../../layout/status", () => ({
     countBlockWord: vi.fn(),
 }));
 
+vi.mock("../../layout/dock/Backlink", () => ({
+    Backlink: class {},
+}));
+
+vi.mock("../../layout/util", () => ({
+    getInstanceById: vi.fn(),
+}));
+
 vi.mock("../../util/needSubscribe", () => ({
     isPaidUser: vi.fn(() => false),
     needSubscribe: vi.fn(() => false),
@@ -175,6 +183,9 @@ const createProtyle = (root: HTMLElement, overrideBlocks2Hs = blocks2Hs) => {
             rootID: "root",
         },
         options: {},
+        scroll: {
+            lastScrollTop: 0,
+        },
         wysiwyg: {
             element: root,
             lastHTMLs: {},

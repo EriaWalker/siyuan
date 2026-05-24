@@ -250,13 +250,8 @@ const clickHeading = (outline: Outline, id: string, ctrl = false) => {
     (window as never as { siyuan: { ctrlIsPressed: boolean } }).siyuan.ctrlIsPressed = false;
 };
 
-const dispatchCtrlAltNumber = (outline: Outline, key: "1" | "2" | "6") => {
-    outline.headerElement.parentElement.dispatchEvent(new KeyboardEvent("keydown", {
-        altKey: true,
-        bubbles: true,
-        ctrlKey: true,
-        key,
-    }));
+const setOutlineHeadingLevel = (outline: Outline, level: 1 | 2 | 6) => {
+    outline.setHeadingLevel(level);
 };
 
 const makeEditorHeading = (id: string, level: number, text: string) => {
@@ -426,13 +421,13 @@ describe("Outline heading selection", () => {
         expect(batchSelectedIds(outline)).toEqual(["parent-a"]);
     });
 
-    it("Outline single H3 + Ctrl+Alt+1 calls the exact H1 heading-level transaction path", () => {
+    it("Outline single H3 action calls the exact H1 heading-level transaction path", () => {
         useEditorHeadings(makeEditorHeading("parent-a", 3, "Parent A"));
         const outline = makeOutline();
         outline.tree.updateData(makeHeadingTree());
 
         clickHeading(outline, "parent-a");
-        dispatchCtrlAltNumber(outline, "1");
+        setOutlineHeadingLevel(outline, 1);
 
         expect(mocks.headingsLevelTransaction).toHaveBeenCalledWith(expect.objectContaining({
             headingElements: [
@@ -447,13 +442,13 @@ describe("Outline heading selection", () => {
         }));
     });
 
-    it("Ctrl+Alt+2 with one selected Outline heading calls the exact H2 heading-level path for that heading", () => {
+    it("setHeadingLevel(2) with one selected Outline heading calls the exact H2 heading-level path for that heading", () => {
         useEditorHeadings(makeEditorHeading("parent-a", 3, "Parent A"));
         const outline = makeOutline();
         outline.tree.updateData(makeHeadingTree());
 
         clickHeading(outline, "parent-a");
-        dispatchCtrlAltNumber(outline, "2");
+        setOutlineHeadingLevel(outline, 2);
 
         expect(mocks.headingsLevelTransaction).toHaveBeenCalledWith(expect.objectContaining({
             headingElements: [
@@ -463,7 +458,7 @@ describe("Outline heading selection", () => {
         }));
     });
 
-    it("Outline multi-selected H2/H3 + Ctrl+Alt+6 calls the exact H6 batch heading-level path for both headings", () => {
+    it("Outline multi-selected H2/H3 + setHeadingLevel(6) calls the exact H6 batch heading-level path for both headings", () => {
         useEditorHeadings([
             makeEditorHeading("parent-a", 2, "Parent A"),
             makeEditorHeading("parent-b", 3, "Parent B"),
@@ -473,7 +468,7 @@ describe("Outline heading selection", () => {
 
         clickHeading(outline, "parent-a");
         clickHeading(outline, "parent-b", true);
-        dispatchCtrlAltNumber(outline, "6");
+        setOutlineHeadingLevel(outline, 6);
 
         expect(mocks.headingsLevelTransaction).toHaveBeenCalledWith(expect.objectContaining({
             headingElements: [
@@ -484,13 +479,14 @@ describe("Outline heading selection", () => {
         }));
     });
 
-    it("Ctrl+Alt+1 and Ctrl+Alt+6 are exact Outline heading-level shortcuts, not relative upgrade/downgrade shortcuts", () => {
+    it("setHeadingLevel(1) and setHeadingLevel(6) are exact Outline heading-level actions, not relative upgrade/downgrade actions", () => {
+        useEditorHeadings(makeEditorHeading("parent-a", 3, "Parent A"));
         const outline = makeOutline();
         outline.tree.updateData(makeHeadingTree());
 
         clickHeading(outline, "parent-a");
-        dispatchCtrlAltNumber(outline, "1");
-        dispatchCtrlAltNumber(outline, "6");
+        setOutlineHeadingLevel(outline, 1);
+        setOutlineHeadingLevel(outline, 6);
 
         expect(mocks.headingsLevelTransaction).toHaveBeenNthCalledWith(1, expect.objectContaining({level: 1}));
         expect(mocks.headingsLevelTransaction).toHaveBeenNthCalledWith(2, expect.objectContaining({level: 6}));

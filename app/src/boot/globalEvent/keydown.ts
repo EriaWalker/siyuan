@@ -968,6 +968,52 @@ const fileTreeKeydown = (app: App, event: KeyboardEvent) => {
     }
 };
 
+type TOutlineHeadingShortcut = {
+    level: number,
+    type: "level",
+} | {
+    direction: "upgrade" | "downgrade",
+    type: "direction",
+};
+
+const getOutlineHeadingShortcut = (event: KeyboardEvent): TOutlineHeadingShortcut | undefined => {
+    if (event.repeat || window.siyuan.config.readonly || !event.altKey || event.shiftKey) {
+        return;
+    }
+    if (/^[1-6]$/.test(event.key)) {
+        const isExactLevelShortcut = isMac() ?
+            event.metaKey && !event.ctrlKey :
+            event.ctrlKey && !event.metaKey;
+        if (isExactLevelShortcut) {
+            return {level: Number(event.key), type: "level"};
+        }
+    }
+    if (!event.ctrlKey && !event.metaKey) {
+        if (event.key === "=") {
+            return {direction: "upgrade", type: "direction"};
+        }
+        if (event.key === "-") {
+            return {direction: "downgrade", type: "direction"};
+        }
+    }
+};
+
+export const routeOutlineHeadingShortcut = (model: Outline, event: KeyboardEvent) => {
+    const outlineHeadingShortcut = getOutlineHeadingShortcut(event);
+    if (!outlineHeadingShortcut) {
+        return false;
+    }
+    const handled = outlineHeadingShortcut.type === "level" ?
+        model.setHeadingLevel(outlineHeadingShortcut.level) :
+        model.changeHeadingLevel(outlineHeadingShortcut.direction);
+    if (handled) {
+        event.preventDefault();
+        event.stopPropagation();
+        return true;
+    }
+    return false;
+};
+
 const panelTreeKeydown = (app: App, event: KeyboardEvent) => {
     // 面板折叠展开操作
     const target = event.target as HTMLElement;
@@ -992,15 +1038,15 @@ const panelTreeKeydown = (app: App, event: KeyboardEvent) => {
     if (activePanelElement.className.indexOf("sy__") === -1) {
         return false;
     }
-    const headingConfig = window.siyuan.config.keymap.editor.heading;
-    const isOutlineHeadingShortcut = activePanelElement.classList.contains("sy__outline") &&
-        !event.repeat && !window.siyuan.config.readonly &&
-        ((event.ctrlKey && event.altKey && /^[1-6]$/.test(event.key)) ||
-            (event.altKey && !event.ctrlKey && !event.metaKey && ["+", "=", "-"].includes(event.key)) ||
-            [1, 2, 3, 4, 5, 6].some(level => headingConfig[`heading${level}` as keyof typeof headingConfig]?.custom &&
-                matchHotKey(headingConfig[`heading${level}` as keyof typeof headingConfig].custom, event)) ||
-            (headingConfig.headingUpgrade?.custom && matchHotKey(headingConfig.headingUpgrade.custom, event)) ||
-            (headingConfig.headingDowngrade?.custom && matchHotKey(headingConfig.headingDowngrade.custom, event)));
+    const outlineHeadingShortcut = activePanelElement.classList.contains("sy__outline") ?
+        getOutlineHeadingShortcut(event) : undefined;
+    if (outlineHeadingShortcut) {
+        const model = (getInstanceById(activePanelElement.getAttribute("data-id"), window.siyuan.layout.layout) as Tab)?.model;
+        if (model instanceof Outline) {
+            return routeOutlineHeadingShortcut(model, event);
+        }
+        return false;
+    }
 
     let matchCommand = false;
     app.plugins.find(item => {
@@ -1020,7 +1066,7 @@ const panelTreeKeydown = (app: App, event: KeyboardEvent) => {
     }
     if (!matchHotKey(window.siyuan.config.keymap.editor.general.collapse.custom, event) &&
         !matchHotKey(window.siyuan.config.keymap.editor.general.expand.custom, event) &&
-        !isOutlineHeadingShortcut && !event.key.startsWith("Arrow") && event.key !== "Enter") {
+        !outlineHeadingShortcut && !event.key.startsWith("Arrow") && event.key !== "Enter") {
         return false;
     }
     if (!event.repeat && matchHotKey(window.siyuan.config.keymap.editor.general.collapse.custom, event)) {
@@ -1047,9 +1093,6 @@ const panelTreeKeydown = (app: App, event: KeyboardEvent) => {
     const model = (getInstanceById(activePanelElement.getAttribute("data-id"), window.siyuan.layout.layout) as Tab)?.model;
     if (!model) {
         return false;
-    }
-    if (isOutlineHeadingShortcut && model instanceof Outline && model.handleHeadingShortcut(event)) {
-        return true;
     }
     let activeItemElement = activePanelElement.querySelector(".b3-list-item--focus");
     if (!activeItemElement) {

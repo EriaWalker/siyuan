@@ -93,13 +93,9 @@ export const getContentByInlineHTML = (range: Range, cb: (content: string) => vo
 };
 
 /**
- * 思源笔记 WYSIWYG 编辑器的键盘事件入口（keydown）。
- *
- * 这个处理器采用“拦截式 + 流式匹配”的方式：
- * - 拦截式：优先阻断不应由浏览器默认处理的按键（避免 contenteditable 造成 DOM 结构破坏/焦点丢失）
- * - 流式匹配：按优先级从强拦截/状态维护 → 快捷键命令 → 兜底清理
- *
- * 为方便阅读，下面按功能大致分为 12 个板块（分段注释不一定与行号严格一一对应，但按处理优先级排列）。
+ * 编辑器的键盘事件入口（keydown）。
+ * 会拦截匹配到的快捷键事件，阻止向上传播
+ * 为方便阅读，下面按功能大致分为 12 个板块。
  */
 export const keydown = (protyle: IProtyle, editorElement: HTMLElement) => {
     editorElement.addEventListener("keydown", async (event: KeyboardEvent & { target: HTMLElement }) => {
