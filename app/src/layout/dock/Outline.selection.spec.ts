@@ -491,4 +491,34 @@ describe("Outline heading selection", () => {
         expect(mocks.headingsLevelTransaction).toHaveBeenNthCalledWith(1, expect.objectContaining({level: 1}));
         expect(mocks.headingsLevelTransaction).toHaveBeenNthCalledWith(2, expect.objectContaining({level: 6}));
     });
+
+    it("changeHeadingLevel uses the batch selected-heading path used by Alt+= and Alt+- routing", () => {
+        useEditorHeadings([
+            makeEditorHeading("parent-a", 2, "Parent A"),
+            makeEditorHeading("parent-b", 3, "Parent B"),
+        ].join(""));
+        const outline = makeOutline();
+        outline.tree.updateData(makeHeadingTree());
+
+        clickHeading(outline, "parent-a");
+        clickHeading(outline, "parent-b", true);
+
+        expect(outline.changeHeadingLevel("upgrade")).toBe(true);
+        expect(outline.changeHeadingLevel("downgrade")).toBe(true);
+
+        expect(mocks.headingsLevelTransaction).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            direction: "upgrade",
+            headingElements: [
+                expect.objectContaining({dataset: expect.objectContaining({nodeId: "parent-a"})}),
+                expect.objectContaining({dataset: expect.objectContaining({nodeId: "parent-b"})}),
+            ],
+        }));
+        expect(mocks.headingsLevelTransaction).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            direction: "downgrade",
+            headingElements: [
+                expect.objectContaining({dataset: expect.objectContaining({nodeId: "parent-a"})}),
+                expect.objectContaining({dataset: expect.objectContaining({nodeId: "parent-b"})}),
+            ],
+        }));
+    });
 });

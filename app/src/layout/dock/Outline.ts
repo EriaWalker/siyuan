@@ -31,6 +31,19 @@ import {dragOverScroll, stopScrollAnimation} from "../../boot/globalEvent/dragov
 
 type TOutlineHeadingLevelDirection = "upgrade" | "downgrade";
 
+const debugOutlineShortcut = (point: string, data: Record<string, unknown>) => {
+    if (window.siyuan?.config?.system?.debugOutlineShortcut === true) {
+        const debugWindow = window as Window & {
+            __outlineShortcutLogs?: Array<{ data: Record<string, unknown>, point: string }>,
+        };
+        if (!debugWindow.__outlineShortcutLogs) {
+            debugWindow.__outlineShortcutLogs = [];
+        }
+        debugWindow.__outlineShortcutLogs.push({point, data});
+        console.info(`[outline-shortcut] ${point}`, data);
+    }
+};
+
 export class Outline extends Model {
     public tree: Tree;
     public element: HTMLElement;
@@ -895,13 +908,22 @@ export class Outline extends Model {
     private getSelectedHeadingItems(fallback?: HTMLElement) {
         const selectableItems = this.getSelectableHeadingItems();
         const selectedItems = selectableItems.filter(item => this.selectedHeadingIds.has(item.getAttribute("data-node-id")));
+        const focusedItems = selectableItems.filter(item => item.classList.contains("b3-list-item--focus"));
+        debugOutlineShortcut("Outline:getSelectedHeadingItems", {
+            fallbackId: fallback?.getAttribute("data-node-id"),
+            focusedIds: focusedItems.map(item => item.getAttribute("data-node-id")),
+            selectableLength: selectableItems.length,
+            selectedHeadingIds: Array.from(this.selectedHeadingIds),
+            selectedItemsLength: selectedItems.length,
+            selectedItemIds: selectedItems.map(item => item.getAttribute("data-node-id")),
+        });
         if (selectedItems.length > 0) {
             return selectedItems;
         }
         if (fallback && selectableItems.includes(fallback)) {
             return [fallback];
         }
-        return selectableItems.filter(item => item.classList.contains("b3-list-item--focus"));
+        return focusedItems;
     }
 
     private getTopLevelSelectedHeadingIds(fallback: HTMLElement, fallbackId?: string) {
@@ -1478,7 +1500,14 @@ export class Outline extends Model {
 
     private getHeadingElementsForTransaction(protyle?: IProtyle, fallbackElement?: HTMLElement) {
         const headingElements: HTMLElement[] = [];
-        this.getSelectedHeadingItems(fallbackElement).forEach(item => {
+        const selectedItems = this.getSelectedHeadingItems(fallbackElement);
+        debugOutlineShortcut("Outline:getHeadingElementsForTransaction:start", {
+            fallbackId: fallbackElement?.getAttribute("data-node-id"),
+            hasProtyle: Boolean(protyle),
+            selectedItemIds: selectedItems.map(item => item.getAttribute("data-node-id")),
+            selectedItemsLength: selectedItems.length,
+        });
+        selectedItems.forEach(item => {
             const id = item.getAttribute("data-node-id");
             if (!id) {
                 return;
@@ -1490,15 +1519,33 @@ export class Outline extends Model {
                 headingElements.push(item);
             }
         });
+        debugOutlineShortcut("Outline:getHeadingElementsForTransaction:end", {
+            headingElementIds: headingElements.map(item => item.getAttribute("data-node-id")),
+            headingElementsLength: headingElements.length,
+        });
         return headingElements;
     }
 
     public setHeadingLevel(level: number, fallbackElement?: HTMLElement) {
+        debugOutlineShortcut("Outline:setHeadingLevel", {
+            fallbackId: fallbackElement?.getAttribute("data-node-id"),
+            level,
+        });
         const protyle = this.getProtyle();
         const headingElements = this.getHeadingElementsForTransaction(protyle, fallbackElement);
         if (!protyle || headingElements.length === 0) {
+            debugOutlineShortcut("Outline:setHeadingLevel:skip", {
+                headingElementsLength: headingElements.length,
+                hasProtyle: Boolean(protyle),
+                level,
+            });
             return false;
         }
+        debugOutlineShortcut("Outline:setHeadingLevel:transaction", {
+            headingElementIds: headingElements.map(item => item.getAttribute("data-node-id")),
+            headingElementsLength: headingElements.length,
+            level,
+        });
         headingsLevelTransaction({
             protyle,
             headingElements,
@@ -1508,14 +1555,32 @@ export class Outline extends Model {
     }
 
     public changeHeadingLevel(direction: TOutlineHeadingLevelDirection, fallbackElement?: HTMLElement) {
+        debugOutlineShortcut("Outline:changeHeadingLevel", {
+            direction,
+            fallbackId: fallbackElement?.getAttribute("data-node-id"),
+        });
         const protyle = this.getProtyle();
         if (!protyle) {
+            debugOutlineShortcut("Outline:changeHeadingLevel:skip", {
+                direction,
+                reason: "no protyle",
+            });
             return false;
         }
         const headingElements = this.getHeadingElementsForTransaction(protyle, fallbackElement);
         if (headingElements.length === 0) {
+            debugOutlineShortcut("Outline:changeHeadingLevel:skip", {
+                direction,
+                headingElementsLength: headingElements.length,
+                reason: "no heading elements",
+            });
             return false;
         }
+        debugOutlineShortcut("Outline:changeHeadingLevel:transaction", {
+            direction,
+            headingElementIds: headingElements.map(item => item.getAttribute("data-node-id")),
+            headingElementsLength: headingElements.length,
+        });
         headingsLevelTransaction({
             protyle,
             headingElements,

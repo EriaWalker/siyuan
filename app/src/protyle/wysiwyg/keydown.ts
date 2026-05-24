@@ -39,6 +39,7 @@ import {enter, softEnter} from "./enter";
 import {clearTableCell, fixTable} from "../util/table";
 import {
     transaction,
+    headingsLevelTransaction,
     turnsIntoOneTransaction,
     turnsIntoTransaction,
     turnsOneInto,
@@ -90,6 +91,86 @@ export const getContentByInlineHTML = (range: Range, cb: (content: string) => vo
     fetchPost("/api/block/getDOMText", {dom: html}, (response) => {
         cb(response.data);
     });
+};
+
+export const resolveEditorHeadingShortcutLevel = (event: KeyboardEvent, keymap: Config.IKeymap["editor"]["heading"]) => {
+    if (event.repeat || !event.altKey || event.shiftKey) {
+        return 0;
+    }
+    for (let level = 1; level <= 6; level++) {
+        const key = `heading${level}` as keyof typeof keymap;
+        if (keymap?.[key]?.custom && matchHotKey(keymap[key].custom, event)) {
+            return level;
+        }
+    }
+    if (/^[1-6]$/.test(event.key)) {
+        const isExactLevelShortcut = isMac() ?
+            event.metaKey && !event.ctrlKey :
+            event.ctrlKey && !event.metaKey;
+        if (isExactLevelShortcut) {
+            return Number(event.key);
+        }
+    }
+    return 0;
+};
+
+export const collectHeadingBlocksForShortcut = (options: {
+    nodeElement?: HTMLElement,
+    protyle: IProtyle,
+    range?: Range,
+}) => {
+    let headingElements = Array.from(options.protyle.wysiwyg.element.querySelectorAll(".protyle-wysiwyg--select"))
+        .filter((item: HTMLElement) => item.getAttribute("data-type") === "NodeHeading") as HTMLElement[];
+    if (headingElements.length > 0) {
+        return headingElements;
+    }
+    if (options.range && !options.range.collapsed) {
+        headingElements = Array.from(options.protyle.wysiwyg.element.querySelectorAll('[data-type="NodeHeading"]'))
+            .filter((item: HTMLElement) => {
+                try {
+                    return options.range.intersectsNode(item);
+                } catch {
+                    return false;
+                }
+            }) as HTMLElement[];
+        if (headingElements.length > 0) {
+            return headingElements;
+        }
+    }
+    if (options.nodeElement?.getAttribute("data-type") === "NodeHeading") {
+        return [options.nodeElement];
+    }
+    return [];
+};
+
+export const dispatchEditorHeadingShortcut = (options: {
+    event: KeyboardEvent,
+    keymap: Config.IKeymap["editor"]["heading"],
+    nodeElement?: HTMLElement,
+    protyle: IProtyle,
+    range?: Range,
+}) => {
+    const level = resolveEditorHeadingShortcutLevel(options.event, options.keymap);
+    if (!level) {
+        return false;
+    }
+    const headingElements = collectHeadingBlocksForShortcut({
+        nodeElement: options.nodeElement,
+        protyle: options.protyle,
+        range: options.range,
+    });
+    if (headingElements.length === 0) {
+        return false;
+    }
+    headingsLevelTransaction({
+        protyle: options.protyle,
+        headingElements,
+        level,
+        range: options.range,
+    });
+    options.event.preventDefault();
+    options.event.stopPropagation();
+    return true;
 };
 
 /**
@@ -1489,6 +1570,15 @@ export const keydown = (protyle: IProtyle, editorElement: HTMLElement) => {
             }
             event.preventDefault();
             event.stopPropagation();
+            return true;
+        }
+        if (dispatchEditorHeadingShortcut({
+            event,
+            keymap: window.siyuan.config.keymap.editor.heading,
+            nodeElement,
+            protyle,
+            range,
+        })) {
             return true;
         }
         if (matchHotKey(window.siyuan.config.keymap.editor.heading.heading1.custom, event)) {

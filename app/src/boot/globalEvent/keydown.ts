@@ -976,36 +976,72 @@ type TOutlineHeadingShortcut = {
     type: "direction",
 };
 
-const getOutlineHeadingShortcut = (event: KeyboardEvent): TOutlineHeadingShortcut | undefined => {
+const debugOutlineShortcut = (point: string, data: Record<string, unknown>) => {
+    if (window.siyuan?.config?.system?.debugOutlineShortcut === true) {
+        const debugWindow = window as Window & {
+            __outlineShortcutLogs?: Array<{ data: Record<string, unknown>, point: string }>,
+        };
+        if (!debugWindow.__outlineShortcutLogs) {
+            debugWindow.__outlineShortcutLogs = [];
+        }
+        debugWindow.__outlineShortcutLogs.push({point, data});
+        console.info(`[outline-shortcut] ${point}`, data);
+    }
+};
+
+const describeOutlineEvent = (event: KeyboardEvent) => {
+    const target = event.target as HTMLElement;
+    return {
+        altKey: event.altKey,
+        code: event.code,
+        ctrlKey: event.ctrlKey,
+        key: event.key,
+        metaKey: event.metaKey,
+        repeat: event.repeat,
+        shiftKey: event.shiftKey,
+        targetClass: target?.className,
+        targetTag: target?.tagName,
+    };
+};
+
+export const resolveOutlineHeadingShortcut = (event: KeyboardEvent): TOutlineHeadingShortcut | undefined => {
     if (event.repeat || window.siyuan.config.readonly || !event.altKey || event.shiftKey) {
         return;
     }
-    if (/^[1-6]$/.test(event.key)) {
+    const levelMatch = /^[1-6]$/.exec(event.key) || /^Digit([1-6])$/.exec(event.code) || /^Numpad([1-6])$/.exec(event.code);
+    if (levelMatch) {
         const isExactLevelShortcut = isMac() ?
             event.metaKey && !event.ctrlKey :
             event.ctrlKey && !event.metaKey;
         if (isExactLevelShortcut) {
-            return {level: Number(event.key), type: "level"};
+            return {level: Number(levelMatch[1] || event.key), type: "level"};
         }
     }
     if (!event.ctrlKey && !event.metaKey) {
-        if (event.key === "=") {
+        if (event.key === "=" || event.code === "Equal") {
             return {direction: "upgrade", type: "direction"};
         }
-        if (event.key === "-") {
+        if (event.key === "-" || event.code === "Minus") {
             return {direction: "downgrade", type: "direction"};
         }
     }
 };
 
-export const routeOutlineHeadingShortcut = (model: Outline, event: KeyboardEvent) => {
-    const outlineHeadingShortcut = getOutlineHeadingShortcut(event);
+export const routeOutlineHeadingShortcut = (model: Outline, event: KeyboardEvent, fallbackElement?: HTMLElement) => {
+    const outlineHeadingShortcut = resolveOutlineHeadingShortcut(event);
+    debugOutlineShortcut("routeOutlineHeadingShortcut", {
+        ...describeOutlineEvent(event),
+        fallbackId: fallbackElement?.getAttribute("data-node-id"),
+        modelConstructor: model?.constructor?.name,
+        recognized: Boolean(outlineHeadingShortcut),
+        resolved: outlineHeadingShortcut,
+    });
     if (!outlineHeadingShortcut) {
         return false;
     }
     const handled = outlineHeadingShortcut.type === "level" ?
-        model.setHeadingLevel(outlineHeadingShortcut.level) :
-        model.changeHeadingLevel(outlineHeadingShortcut.direction);
+        model.setHeadingLevel(outlineHeadingShortcut.level, fallbackElement) :
+        model.changeHeadingLevel(outlineHeadingShortcut.direction, fallbackElement);
     if (handled) {
         event.preventDefault();
         event.stopPropagation();
@@ -1014,16 +1050,47 @@ export const routeOutlineHeadingShortcut = (model: Outline, event: KeyboardEvent
     return false;
 };
 
-const panelTreeKeydown = (app: App, event: KeyboardEvent) => {
+export const panelTreeKeydown = (app: App, event: KeyboardEvent) => {
     // 面板折叠展开操作
     const target = event.target as HTMLElement;
+    const targetOutlineElement = target.closest?.(".sy__outline") as HTMLElement;
+    const targetOutlineHeadingShortcut = targetOutlineElement ? resolveOutlineHeadingShortcut(event) : undefined;
+    debugOutlineShortcut("panelTreeKeydown:start", {
+        ...describeOutlineEvent(event),
+        activeLayoutTab: document.querySelector(".layout__tab--active")?.className,
+        activeLayoutTabId: document.querySelector(".layout__tab--active")?.getAttribute("data-id"),
+        targetOutlineClass: targetOutlineElement?.className,
+        targetOutlineId: targetOutlineElement?.getAttribute("data-id"),
+        targetOutlineHeadingShortcut,
+    });
+    if (targetOutlineHeadingShortcut) {
+        const model = (getInstanceById(targetOutlineElement.getAttribute("data-id"), window.siyuan.layout.layout) as Tab)?.model;
+        const fallbackElement = (target.closest?.("[data-node-id]") || target.closest?.(".b3-list-item")) as HTMLElement;
+        debugOutlineShortcut("panelTreeKeydown:target-outline-model", {
+            fallbackId: fallbackElement?.getAttribute("data-node-id"),
+            modelConstructor: model?.constructor?.name,
+            modelFound: Boolean(model),
+            modelInstanceOfOutline: model instanceof Outline,
+        });
+        if (model instanceof Outline) {
+            return routeOutlineHeadingShortcut(model, event, fallbackElement);
+        }
+        return false;
+    }
     if (["INPUT", "TEXTAREA"].includes(target.tagName) ||
         hasClosestByAttribute(target, "contenteditable", null) ||
         hasClosestByClassName(target, "protyle", true)) {
+        debugOutlineShortcut("panelTreeKeydown:early-return", {
+            reason: "ignored target",
+            ...describeOutlineEvent(event),
+        });
         return false;
     }
 
-    let activePanelElement = document.querySelector(".layout__tab--active");
+    let activePanelElement = targetOutlineElement;
+    if (!activePanelElement) {
+        activePanelElement = document.querySelector(".layout__tab--active");
+    }
     if (!activePanelElement) {
         Array.from(document.querySelectorAll(".layout__wnd--active .layout-tab-container > div")).find(item => {
             if (!item.classList.contains("fn__none") && item.className.indexOf("sy__") > -1) {
@@ -1033,17 +1100,39 @@ const panelTreeKeydown = (app: App, event: KeyboardEvent) => {
         });
     }
     if (!activePanelElement) {
+        debugOutlineShortcut("panelTreeKeydown:early-return", {
+            reason: "no active panel",
+            ...describeOutlineEvent(event),
+        });
         return false;
     }
     if (activePanelElement.className.indexOf("sy__") === -1) {
+        debugOutlineShortcut("panelTreeKeydown:early-return", {
+            activePanelClass: activePanelElement.className,
+            reason: "active panel is not a sy panel",
+            ...describeOutlineEvent(event),
+        });
         return false;
     }
     const outlineHeadingShortcut = activePanelElement.classList.contains("sy__outline") ?
-        getOutlineHeadingShortcut(event) : undefined;
+        resolveOutlineHeadingShortcut(event) : undefined;
+    debugOutlineShortcut("panelTreeKeydown:resolved-panel", {
+        activePanelClass: activePanelElement.className,
+        activePanelId: activePanelElement.getAttribute("data-id"),
+        activePanelIsOutline: activePanelElement.classList.contains("sy__outline"),
+        outlineHeadingShortcut,
+    });
     if (outlineHeadingShortcut) {
         const model = (getInstanceById(activePanelElement.getAttribute("data-id"), window.siyuan.layout.layout) as Tab)?.model;
+        const fallbackElement = target.closest?.('li[data-node-id]') as HTMLElement;
+        debugOutlineShortcut("panelTreeKeydown:model", {
+            fallbackId: fallbackElement?.getAttribute("data-node-id"),
+            modelConstructor: model?.constructor?.name,
+            modelFound: Boolean(model),
+            modelInstanceOfOutline: model instanceof Outline,
+        });
         if (model instanceof Outline) {
-            return routeOutlineHeadingShortcut(model, event);
+            return routeOutlineHeadingShortcut(model, event, fallbackElement);
         }
         return false;
     }
@@ -1227,6 +1316,7 @@ const panelTreeKeydown = (app: App, event: KeyboardEvent) => {
 
 let switchDialog: Dialog;
 export const windowKeyDown = (app: App, event: KeyboardEvent) => {
+    debugOutlineShortcut("windowKeyDown", describeOutlineEvent(event));
     if (filterHotkey(event, app)) {
         return;
     }

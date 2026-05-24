@@ -22,9 +22,9 @@ describe("Outline heading shortcuts", () => {
 
         expect(globalKeydown).toContain('activePanelElement.classList.contains("sy__outline")');
         expect(globalKeydown).toContain("model instanceof Outline");
-        expect(globalKeydown).toContain("routeOutlineHeadingShortcut(model, event)");
-        expect(globalKeydown).toContain("model.setHeadingLevel(outlineHeadingShortcut.level)");
-        expect(globalKeydown).toContain("model.changeHeadingLevel(outlineHeadingShortcut.direction)");
+        expect(globalKeydown).toContain("routeOutlineHeadingShortcut(model, event, fallbackElement)");
+        expect(globalKeydown).toContain("model.setHeadingLevel(outlineHeadingShortcut.level, fallbackElement)");
+        expect(globalKeydown).toContain("model.changeHeadingLevel(outlineHeadingShortcut.direction, fallbackElement)");
         expect(outline).toContain("public setHeadingLevel(level: number");
         expect(outline).toContain("public changeHeadingLevel(direction: TOutlineHeadingLevelDirection");
         expect(outline).not.toContain("handleHeadingShortcut(event");
@@ -49,15 +49,4 @@ describe("Outline heading shortcuts", () => {
         expect(globalKeydown).toContain('event.key === "-"');
     });
 
-    it.todo("Alt+= on one selected Outline heading calls the existing upgrade path through global keydown");
-
-    it.todo("Alt+- on one selected Outline heading calls the existing downgrade path through global keydown");
-
-    it.todo("Alt+= and Alt+- use the batch path for multiple Outline headings through global keydown");
-
-    it.todo("editor Ctrl+Alt+number dispatch on a single editor heading calls the exact heading-level path");
-    // The real handler lives in protyle/wysiwyg/keydown.ts. A clean unit needs extractHeadingShortcutLevel(event, keymap) or collectHeadingBlocksForShortcut(rangeOrCurrentBlock, outlineSelectionState).
-
-    it.todo("editor Ctrl+Alt+number dispatch with a selection/range containing multiple headings calls the batch exact-level path");
-    // Needs collectHeadingBlocksForShortcut(rangeOrCurrentBlock, outlineSelectionState) so range-based heading collection can be tested without full editor runtime integration.
 });

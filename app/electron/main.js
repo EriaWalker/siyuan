@@ -53,6 +53,10 @@ const isOpenAsHidden = function () {
     return 1 === workspaces.length && openAsHidden;
 };
 
+if (isDevEnv && process.env.SIYUAN_E2E_REMOTE_DEBUGGING_PORT) {
+    app.commandLine.appendSwitch("remote-debugging-port", process.env.SIYUAN_E2E_REMOTE_DEBUGGING_PORT);
+}
+
 remote.initialize();
 
 // Electron 相关文件夹名称改为 `SiYuan-Electron` https://github.com/siyuan-note/siyuan/issues/3349
