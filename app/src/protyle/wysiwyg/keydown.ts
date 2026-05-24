@@ -92,8 +92,23 @@ export const getContentByInlineHTML = (range: Range, cb: (content: string) => vo
     });
 };
 
+/**
+ * 思源笔记 WYSIWYG 编辑器的键盘事件入口（keydown）。
+ *
+ * 这个处理器采用“拦截式 + 流式匹配”的方式：
+ * - 拦截式：优先阻断不应由浏览器默认处理的按键（避免 contenteditable 造成 DOM 结构破坏/焦点丢失）
+ * - 流式匹配：按优先级从强拦截/状态维护 → 快捷键命令 → 兜底清理
+ *
+ * 为方便阅读，下面按功能大致分为 12 个板块（分段注释不一定与行号严格一一对应，但按处理优先级排列）。
+ */
 export const keydown = (protyle: IProtyle, editorElement: HTMLElement) => {
     editorElement.addEventListener("keydown", async (event: KeyboardEvent & { target: HTMLElement }) => {
+        // ============================================================================
+        // 第1部分：前置条件拦截与状态重置
+        // - 过滤不应该进入编辑器逻辑的目标（HTML 渲染块、input、属性视图搜索等）
+        // - 禁用态/选择态直接拦截，避免误操作
+        // - 隐藏悬浮 UI，并获取当前 range 与所在块 nodeElement
+        // ============================================================================
         if (event.target.localName === "protyle-html" || event.target.localName === "input") {
             event.stopPropagation();
             return;
@@ -124,6 +139,13 @@ export const keydown = (protyle: IProtyle, editorElement: HTMLElement) => {
         if (!nodeElement) {
             return;
         }
+
+        // ============================================================================
+        // 第2部分：跨块选区拦截与属性视图（AV/Database）键盘接管
+        // - 选区跨越不同块时（除复制外）禁止继续处理，避免把编辑行为作用到多个块导致结构异常
+        // - AV 面板存在或 avKeydown 接管时，直接返回
+        // - 块选择态下的 a/b：快速在当前块后/前插入空块（用于“选中块后直接输入”的场景）
+        // ============================================================================
 
         // https://ld246.com/article/1694506408293
         const endElement = hasClosestBlock(range.endContainer);
@@ -159,6 +181,14 @@ export const keydown = (protyle: IProtyle, editorElement: HTMLElement) => {
                 return false;
             }
         }
+
+        // ============================================================================
+        // 第3部分：输入法/斜杠 Hint 与菜单状态维护
+        // - composing 输入时不做额外处理，避免打断输入法
+        // - / 与 \\ 切换 Hint（兼容不同键盘布局/语言/输入法）
+        // - 插入 wbr/ZWSP 等占位，避免部分输入法因 focusByRange 等重定位导致无法输入/丢字
+        // - 有菜单弹出时限制按键（通常只允许方向键/回车）
+        // ============================================================================
         if (event.isComposing) {
             event.stopPropagation();
             return;
@@ -206,6 +236,11 @@ export const keydown = (protyle: IProtyle, editorElement: HTMLElement) => {
             protyle.breadcrumb.hide();
         }
 
+        // ============================================================================
+        // 第4部分：块多选/选择态下的方向键导航 + 选择态按键过滤
+        // - 已选中块（.protyle-wysiwyg--select）时，↑/↓ 在块之间移动选中焦点并滚动视图
+        // - 同步字数统计与焦点（focusBlock），并处理折叠块/超级块等边界
+        // ============================================================================
         if (!event.altKey && !event.shiftKey && isNotCtrl(event) && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
             const selectElements = protyle.wysiwyg.element.querySelectorAll(".protyle-wysiwyg--select");
             if (selectElements.length > 0) {
@@ -294,7 +329,7 @@ export const keydown = (protyle: IProtyle, editorElement: HTMLElement) => {
             }
         }
 
-        // 仅处理以下快捷键操作
+        // 仅处理以下快捷键操作（选择态/块态下过滤普通字符输入，避免把字符写入“块选中态”）
         if (event.key !== "PageUp" && event.key !== "PageDown" && event.key !== "Home" && event.key !== "End" && event.key.indexOf("Arrow") === -1 &&
             isNotCtrl(event) && event.key !== "Escape" && !event.shiftKey && !event.altKey && !/^F\d{1,2}$/.test(event.key) &&
             event.key !== "Enter" && event.key !== "Tab" && event.key !== "Backspace" && event.key !== "Delete" && event.key !== "ContextMenu") {
@@ -308,6 +343,11 @@ export const keydown = (protyle: IProtyle, editorElement: HTMLElement) => {
             return false;
         }
 
+        // ============================================================================
+        // 第5部分：大纲/折叠操作与扩展块选区
+        // - 折叠/展开/递归折叠：getFoldBlock + setFold/foldBlocksRecursively
+        // - 向上/下扩展选中块：expandUp/expandDown，以及 Shift+↑/↓ 的连续选择逻辑
+        // ============================================================================
         const nodeType = nodeElement.getAttribute("data-type");
         if (matchHotKey(window.siyuan.config.keymap.editor.general.collapse.custom, event) && !event.repeat) {
             getFoldBlock(protyle, nodeElement, (elements) => {
@@ -471,6 +511,11 @@ export const keydown = (protyle: IProtyle, editorElement: HTMLElement) => {
             return;
         }
 
+        // ============================================================================
+        // 第6部分：进入/退出（enter/enterBack）与 Home/End 连续块选择
+        // - enter/enterBack：在当前块与父级结构（列表项/超级块等）间跳转
+        // - Shift+Home/End：在超级块/容器内进行连续块级联选择（兼容 Mac/Win 键位差异）
+        // ============================================================================
         if (matchHotKey(window.siyuan.config.keymap.general.enter.custom, event)) {
             onlyProtyleCommand({
                 protyle,
@@ -525,6 +570,12 @@ export const keydown = (protyle: IProtyle, editorElement: HTMLElement) => {
         if ((event.key === "Home" || event.key === "End") && !event.shiftKey && !event.altKey && isNotCtrl(event)) {
             hideElements(["hint"], protyle);
         }
+
+        // ============================================================================
+        // 第7部分：页面滚动与 Hint（斜杠菜单）键盘交互
+        // - PageUp/PageDown：滚动一屏并尝试将焦点聚焦到屏幕中心块
+        // - Hint 显示时：用 ↑/↓/Enter 进行候选项选择
+        // ============================================================================
         // 向上/下滚动一屏
         if (!event.altKey && !event.shiftKey && isNotCtrl(event) && (event.key === "PageUp" || event.key === "PageDown")) {
             if (event.key === "PageUp") {
@@ -553,6 +604,12 @@ export const keydown = (protyle: IProtyle, editorElement: HTMLElement) => {
             !protyle.hint.element.classList.contains("fn__none") && protyle.hint.select(event, protyle)) {
             return;
         }
+
+        // ============================================================================
+        // 第8部分：内联元素浮动菜单触发 + 表格修复
+        // - ⌘/：根据光标所在内联类型（块引/链接/标签/备注/公式等）弹出相应菜单
+        // - fixTable：表格场景下对部分键盘行为做纠偏
+        // ============================================================================
         if (matchHotKey("⌘/", event)) {
             event.stopPropagation();
             event.preventDefault();
@@ -620,6 +677,11 @@ export const keydown = (protyle: IProtyle, editorElement: HTMLElement) => {
         }
         const selectText = range.toString();
 
+        // ============================================================================
+        // 第9部分：上下左右光标移动的细节修正（跨块边界、折叠块、表格单元格、ZWSP 等）
+        // - 解决 contenteditable 在块边缘时无法自然越界/焦点丢失的问题
+        // - 通过 focusBlock / setLastNodeRange 等手段把光标移动到相邻块
+        // ============================================================================
         // 上下左右光标移动
         if (!event.altKey && !event.shiftKey && isNotCtrl(event) && !event.isComposing && (event.key.indexOf("Arrow") > -1)) {
             // 需使用 editabled，否则代码块会把语言字数算入
@@ -785,6 +847,11 @@ export const keydown = (protyle: IProtyle, editorElement: HTMLElement) => {
             return;
         }
 
+        // ============================================================================
+        // 第10部分：删除键与换行（Backspace/Delete/软换行/回车）
+        // - 处理块删除、行首/段末合并、图片/公式等特殊内联的删除
+        // - Shift+Enter 软换行；Enter 根据块类型插入/拆分块
+        // ============================================================================
         // 删除，不可使用 isNotCtrl(event)，否则软删除回导致 https://github.com/siyuan-note/siyuan/issues/5607
         // 不可使用 !event.shiftKey，否则 https://ld246.com/article/1666434796806
         if ((!event.altKey && (event.key === "Backspace" || event.key === "Delete")) ||
@@ -1124,6 +1191,12 @@ export const keydown = (protyle: IProtyle, editorElement: HTMLElement) => {
             return;
         }
 
+        // ============================================================================
+        // 第11部分：标准快捷键/格式化与块类型转换
+        // - 全选、撤销/重做、复制块协议链接、块属性、重命名、新建子文档
+        // - 对齐/方向、标题转换、插入代码块、工具栏动作
+        // - 列表缩进/反缩进、列表/引用/表格插入、任务切换、标题转换等
+        // ============================================================================
         if (matchHotKey("⌘A", event)) {
             event.preventDefault();
             selectAll(protyle, nodeElement, range);
@@ -1824,6 +1897,13 @@ export const keydown = (protyle: IProtyle, editorElement: HTMLElement) => {
             return;
         }
 
+        // ============================================================================
+        // 第12部分：AI/块引用跳转/打开方式等尾部快捷键 + 兜底清理
+        // - AI 动作/写作、新页签打开
+        // - Tab/ContextMenu、块引用上的打开/分屏/弹窗
+        // - 纯文本粘贴、打开方式（openBy）、与自定义快捷键冲突的降级处理
+        // - 最后统一隐藏选中态，并阻止浏览器默认的 ⌘B/⌘I/⌘U
+        // ============================================================================
         if (!event.repeat && matchHotKey(window.siyuan.config.keymap.editor.general.ai.custom, event)) {
             event.preventDefault();
             event.stopPropagation();

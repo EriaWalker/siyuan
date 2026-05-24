@@ -1521,6 +1521,7 @@ export class Outline extends Model {
         });
     }
 
+    // TODO: 正在检查这段代码是否有问题
     public handleHeadingShortcut(event: KeyboardEvent) {
         if (window.siyuan.config.readonly || event.repeat) {
             return false;
